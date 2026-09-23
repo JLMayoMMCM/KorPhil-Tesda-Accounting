@@ -1,2 +1,8 @@
-#env 
+#env
 .env
+
+__pycache__/
+venv/
+db.sqlite3
+service_account.json
+.impeccable/review/

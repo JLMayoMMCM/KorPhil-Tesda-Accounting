@@ -1,0 +1,510 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-23T06:39:36+00:00",
+  "title": "Design System: KorPhil-TESDA Disbursements",
+  "extensions": {
+    "colorMeta": {
+      "brand": {
+        "role": "primary",
+        "displayName": "Seal Navy",
+        "canonical": "#232a7c",
+        "tonalRamp": [
+          "#11143c",
+          "#1e2469",
+          "#2a3397",
+          "#3742c4",
+          "#636cd3",
+          "#9096e0",
+          "#bec1ed",
+          "#ebecf9"
+        ]
+      },
+      "brand-hover": {
+        "role": "primary",
+        "displayName": "Midnight Navy",
+        "canonical": "#181e62",
+        "tonalRamp": [
+          "#0f133d",
+          "#1b216c",
+          "#262f9b",
+          "#313eca",
+          "#5e68d8",
+          "#8d94e3",
+          "#bcc0ef",
+          "#ebecfa"
+        ]
+      },
+      "brand-tint": {
+        "role": "primary",
+        "displayName": "Navy Wash",
+        "canonical": "#e7e9f8",
+        "tonalRamp": [
+          "#11163b",
+          "#1e2768",
+          "#2c3895",
+          "#3949c3",
+          "#6471d2",
+          "#919adf",
+          "#bec4ec",
+          "#ebedf9"
+        ]
+      },
+      "brand-ink": {
+        "role": "primary",
+        "displayName": "On Navy",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "#262626",
+          "#434343",
+          "#616161",
+          "#7e7e7e",
+          "#9b9b9b",
+          "#b8b8b8",
+          "#d5d5d5",
+          "#f2f2f2"
+        ]
+      },
+      "overdue": {
+        "role": "status",
+        "displayName": "Overdue Red",
+        "canonical": "#b42318",
+        "tonalRamp": [
+          "#440d09",
+          "#771710",
+          "#aa2117",
+          "#de2b1e",
+          "#e7594e",
+          "#ee8982",
+          "#f5bab5",
+          "#fceae9"
+        ]
+      },
+      "overdue-bg": {
+        "role": "status",
+        "displayName": "Overdue Blush",
+        "canonical": "#fdecea",
+        "tonalRamp": [
+          "#460d07",
+          "#7b170c",
+          "#b02211",
+          "#e62c16",
+          "#ee5948",
+          "#f38a7d",
+          "#f8bab2",
+          "#fdeae8"
+        ]
+      },
+      "pending": {
+        "role": "status",
+        "displayName": "Pending Amber",
+        "canonical": "#b86e00",
+        "tonalRamp": [
+          "#4c2e00",
+          "#875100",
+          "#c17300",
+          "#fb9600",
+          "#ffae37",
+          "#ffc671",
+          "#ffddab",
+          "#fff5e6"
+        ]
+      },
+      "pending-ink": {
+        "role": "status",
+        "displayName": "Pending Umber",
+        "canonical": "#8a5200",
+        "tonalRamp": [
+          "#4c2d00",
+          "#875000",
+          "#c17300",
+          "#fb9500",
+          "#ffae37",
+          "#ffc571",
+          "#ffddab",
+          "#fff5e6"
+        ]
+      },
+      "paid": {
+        "role": "status",
+        "displayName": "Paid Green",
+        "canonical": "#1b7a45",
+        "tonalRamp": [
+          "#0e3f23",
+          "#186e3e",
+          "#239e59",
+          "#2ece74",
+          "#5bdb93",
+          "#8be5b3",
+          "#baf0d2",
+          "#eafaf1"
+        ]
+      },
+      "paid-bg": {
+        "role": "status",
+        "displayName": "Paid Mint",
+        "canonical": "#e6f4ec",
+        "tonalRamp": [
+          "#173524",
+          "#295e40",
+          "#3b865b",
+          "#4daf77",
+          "#74c295",
+          "#9cd4b4",
+          "#c5e5d3",
+          "#edf7f2"
+        ]
+      },
+      "bg": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "#262626",
+          "#434343",
+          "#616161",
+          "#7e7e7e",
+          "#9b9b9b",
+          "#b8b8b8",
+          "#d5d5d5",
+          "#f2f2f2"
+        ]
+      },
+      "side": {
+        "role": "neutral",
+        "displayName": "Lavender Grey",
+        "canonical": "#f3f4f9",
+        "tonalRamp": [
+          "#191e33",
+          "#2d345a",
+          "#404b81",
+          "#5462a8",
+          "#7985bc",
+          "#a0a8d0",
+          "#c7cce3",
+          "#eeeff6"
+        ]
+      },
+      "tint": {
+        "role": "neutral",
+        "displayName": "Ledger Tint",
+        "canonical": "#f6f7fb",
+        "tonalRamp": [
+          "#181d35",
+          "#29345d",
+          "#3b4a86",
+          "#4d61ae",
+          "#7484c1",
+          "#9da8d3",
+          "#c5cbe5",
+          "#edeff7"
+        ]
+      },
+      "hover": {
+        "role": "neutral",
+        "displayName": "Hover Grey",
+        "canonical": "#eef0f7",
+        "tonalRamp": [
+          "#181f34",
+          "#2b365c",
+          "#3e4d83",
+          "#5065ab",
+          "#7787bf",
+          "#9eaad2",
+          "#c6cde4",
+          "#eef0f7"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "#e3e5ee",
+        "tonalRamp": [
+          "#1d2030",
+          "#333954",
+          "#495278",
+          "#5f6a9c",
+          "#828bb3",
+          "#a7adc9",
+          "#cbcfdf",
+          "#eff0f5"
+        ]
+      },
+      "line-2": {
+        "role": "neutral",
+        "displayName": "Control Line",
+        "canonical": "#cfd2e0",
+        "tonalRamp": [
+          "#1e212e",
+          "#353a52",
+          "#4c5375",
+          "#636c99",
+          "#858db0",
+          "#a9aec7",
+          "#cccfde",
+          "#f0f0f5"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ledger Ink",
+        "canonical": "#161830",
+        "tonalRamp": [
+          "#181a34",
+          "#2a2e5c",
+          "#3d4284",
+          "#4f56ac",
+          "#767bc0",
+          "#9ea2d2",
+          "#c6c8e5",
+          "#eeeef7"
+        ]
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Slate",
+        "canonical": "#4a4e6a",
+        "tonalRamp": [
+          "#1f212d",
+          "#373a4f",
+          "#4f5472",
+          "#676d94",
+          "#898dad",
+          "#abaec5",
+          "#ced0dd",
+          "#f0f1f5"
+        ]
+      },
+      "ink-3": {
+        "role": "neutral",
+        "displayName": "Mist",
+        "canonical": "#676b86",
+        "tonalRamp": [
+          "#21232b",
+          "#3b3d4c",
+          "#54576d",
+          "#6d718e",
+          "#8e91a8",
+          "#afb1c1",
+          "#d0d1db",
+          "#f1f1f4"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Page title in the action bar; report sentence builder."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Section heads."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Base text, fields, ledger rows."
+      },
+      "table": {
+        "displayName": "Table",
+        "purpose": "Data grids, buttons, toolbars, tabs."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Field labels, chips, small buttons, hints."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Table header cells, counts, meta."
+      }
+    },
+    "shadows": [
+      {
+        "name": "toast",
+        "value": "0 6px 20px rgb(22 24 48 / .18)",
+        "purpose": "Transient toasts."
+      },
+      {
+        "name": "popover",
+        "value": "0 10px 30px rgb(22 24 48 / .14)",
+        "purpose": "Filter menu."
+      },
+      {
+        "name": "bulkbar",
+        "value": "0 10px 30px rgb(22 24 48 / .25)",
+        "purpose": "Floating bulk-action bar."
+      },
+      {
+        "name": "focus-halo",
+        "value": "0 0 0 3px var(--brand-tint)",
+        "purpose": "Input and search focus."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state",
+        "value": ".15s ease-out",
+        "purpose": "Background and border changes on hover."
+      },
+      {
+        "name": "row-action-reveal",
+        "value": "opacity .12s ease-out",
+        "purpose": "Register row actions appear on row hover or focus."
+      },
+      {
+        "name": "rise",
+        "value": ".2s ease-out from translateY(8px), opacity 0",
+        "purpose": "Bulk bar entrance."
+      },
+      {
+        "name": "toast",
+        "value": "4s ease-out; fade in with 6px drop, fade out",
+        "purpose": "Toast lifecycle; error toasts persist."
+      },
+      {
+        "name": "reduced-motion",
+        "value": ".01ms",
+        "purpose": "prefers-reduced-motion collapses all animation and transition."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "narrow-rails",
+        "value": "1280px"
+      },
+      {
+        "name": "stack",
+        "value": "1024px"
+      },
+      {
+        "name": "mobile",
+        "value": "760px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one navy action per region (New DV, Save, Sync now).",
+      "html": "<button class=\"ds-btn ds-btn-primary\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12h14\"/><path d=\"M12 5v14\"/></svg>New DV<kbd class=\"ds-kbd\">N</kbd></button>",
+      "css": ".ds-btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:34px; padding:0 14px; border-radius:var(--radius, 6px); border:1px solid var(--line-2, #cfd2e0); background:var(--bg, #fff); color:var(--ink, #161830); font:600 13px/1 'Public Sans', system-ui, sans-serif; cursor:pointer; transition:background-color .15s ease-out, border-color .15s ease-out; } .ds-btn:hover { background:var(--tint, #f6f7fb); border-color:var(--ink-3, #676b86); } .ds-btn:active { background:var(--hover, #eef0f7); } .ds-btn:focus-visible { outline:2px solid var(--brand, #232a7c); outline-offset:2px; } .ds-btn-primary { background:var(--brand, #232a7c); border-color:var(--brand, #232a7c); color:var(--brand-ink, #fff); } .ds-btn-primary:hover { background:var(--brand-hover, #181e62); border-color:var(--brand-hover, #181e62); } .ds-kbd { font:500 11px/1 'Public Sans', system-ui, sans-serif; padding:3px 5px; border-radius:4px; border:1px solid currentColor; opacity:.7; margin-left:8px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "Outlined default action (Run report, Export); small size for row actions like Mark paid.",
+      "html": "<button class=\"ds-btn\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"/><path d=\"m7 10 5 5 5-5\"/><path d=\"M12 15V3\"/></svg>Export</button> <button class=\"ds-btn ds-btn-sm\">Mark paid</button>",
+      "css": ".ds-btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:34px; padding:0 14px; border-radius:var(--radius, 6px); border:1px solid var(--line-2, #cfd2e0); background:var(--bg, #fff); color:var(--ink, #161830); font:600 13px/1 'Public Sans', system-ui, sans-serif; cursor:pointer; transition:background-color .15s ease-out, border-color .15s ease-out; } .ds-btn:hover { background:var(--tint, #f6f7fb); border-color:var(--ink-3, #676b86); } .ds-btn:active { background:var(--hover, #eef0f7); } .ds-btn:focus-visible { outline:2px solid var(--brand, #232a7c); outline-offset:2px; } .ds-btn-sm { height:28px; padding:0 10px; font-size:12.5px; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Side-panel field with label above; navy border and wash halo on focus.",
+      "html": "<label class=\"ds-field\">Amount<span class=\"ds-affix\"><span>&#8369;</span><input value=\"9,094.00\"></span></label>",
+      "css": ".ds-field { display:grid; gap:5px; width:240px; font:500 12.5px 'Public Sans', system-ui, sans-serif; color:var(--ink-2, #4a4e6a); } .ds-affix { position:relative; display:block; } .ds-affix > span { position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:14px; } .ds-field input { height:36px; width:100%; box-sizing:border-box; padding:0 10px 0 24px; border:1px solid var(--line-2, #cfd2e0); border-radius:var(--radius, 6px); background:var(--bg, #fff); color:var(--ink, #161830); font:400 14px 'Public Sans', system-ui, sans-serif; font-variant-numeric:tabular-nums; caret-color:var(--brand, #232a7c); } .ds-field input:hover { border-color:var(--ink-3, #676b86); } .ds-field input:focus { outline:0; border-color:var(--brand, #232a7c); box-shadow:0 0 0 3px var(--brand-tint, #e7e9f8); } .ds-field input:user-invalid { border-color:var(--overdue, #b42318); }"
+    },
+    {
+      "name": "Sidebar Navigation",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "Sidebar items with counts; the current item is a navy wash fill.",
+      "html": "<nav class=\"ds-nav\"><a aria-current=\"page\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect width=\"7\" height=\"9\" x=\"3\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"14\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"9\" x=\"14\" y=\"12\" rx=\"1\"/><rect width=\"7\" height=\"5\" x=\"3\" y=\"16\" rx=\"1\"/></svg>Workspace</a><a><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z\"/><path d=\"M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8\"/><path d=\"M12 17.5v-11\"/></svg>Vouchers<span class=\"ds-count\">19</span></a><a class=\"ds-sub\">Overdue<span class=\"ds-count ds-alert\">5</span></a></nav>",
+      "css": ".ds-nav { display:flex; flex-direction:column; gap:2px; width:184px; padding:8px; background:var(--side, #f3f4f9); font:500 14px 'Public Sans', system-ui, sans-serif; font-variant-numeric:tabular-nums; } .ds-nav a { display:flex; align-items:center; gap:10px; height:34px; padding:0 10px; border-radius:var(--radius, 6px); color:var(--ink, #161830); cursor:pointer; transition:background-color .15s ease-out; } .ds-nav a:hover { background:var(--hover, #eef0f7); } .ds-nav a:focus-visible { outline:2px solid var(--brand, #232a7c); outline-offset:2px; } .ds-nav svg { flex:none; color:var(--ink-3, #676b86); } .ds-nav a[aria-current] { background:var(--brand-tint, #e7e9f8); color:var(--brand, #232a7c); font-weight:700; } .ds-nav a[aria-current] svg { color:var(--brand, #232a7c); } .ds-nav a.ds-sub { height:28px; padding-left:36px; font-size:13px; font-weight:400; color:var(--ink-2, #4a4e6a); } .ds-count { margin-left:auto; font-size:12px; font-weight:500; color:var(--ink-3, #676b86); } .ds-count.ds-alert { color:var(--overdue, #b42318); font-weight:700; }"
+    },
+    {
+      "name": "Filter Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Active filter; hover turns red to signal removal.",
+      "html": "<a class=\"ds-chip\" tabindex=\"0\">Area: CANTEEN<svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/></svg></a>",
+      "css": ".ds-chip { display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 8px 0 10px; border-radius:var(--radius, 6px); border:1px solid var(--line-2, #cfd2e0); color:var(--ink, #161830); font:500 12.5px 'Public Sans', system-ui, sans-serif; cursor:pointer; } .ds-chip:hover { border-color:var(--overdue, #b42318); color:var(--overdue, #b42318); } .ds-chip:focus-visible { outline:2px solid var(--brand, #232a7c); outline-offset:2px; }"
+    },
+    {
+      "name": "Status Mark",
+      "kind": "custom",
+      "description": "Shape + colour voucher status; reserved for voucher status only.",
+      "html": "<span class=\"ds-status ds-overdue\">26 days late</span> <span class=\"ds-status ds-pending\">Pending</span> <span class=\"ds-status ds-paid\">Paid</span>",
+      "css": ".ds-status { display:inline-flex; align-items:center; gap:8px; margin-right:16px; font:400 13px 'Public Sans', system-ui, sans-serif; color:var(--ink, #161830); } .ds-status::before { content:''; width:10px; height:10px; box-sizing:border-box; border-radius:2px; flex:none; } .ds-overdue { color:var(--overdue, #b42318); font-weight:600; } .ds-overdue::before { background:var(--overdue, #b42318); } .ds-pending::before { border:2px solid var(--pending, #b86e00); } .ds-paid::before { background:var(--paid, #1b7a45); border-radius:50%; }"
+    },
+    {
+      "name": "Data Grid",
+      "kind": "custom",
+      "refersTo": "table-row",
+      "description": "Hairline ledger table: tint header band, wash selection, 2px ink total rule.",
+      "html": "<table class=\"ds-grid\"><thead><tr><th></th><th>DV #</th><th>Payee</th><th class=\"ds-num\">Amount</th></tr></thead><tbody><tr class=\"ds-sel\"><td><input type=\"checkbox\" checked aria-label=\"Select\"></td><td><b>DV-2026-003</b></td><td>Apple</td><td class=\"ds-num\"><b>&#8369;9,094.00</b></td></tr><tr><td><input type=\"checkbox\" aria-label=\"Select\"></td><td><b>DV-2026-005</b></td><td>Anne</td><td class=\"ds-num\"><b>&#8369;5,555.00</b></td></tr></tbody><tfoot><tr><th colspan=\"3\">Total &middot; 2 vouchers</th><td class=\"ds-num\">&#8369;14,649.00</td></tr></tfoot></table>",
+      "css": ".ds-grid { width:520px; border-collapse:collapse; font:400 13px 'Public Sans', system-ui, sans-serif; font-variant-numeric:tabular-nums; color:var(--ink, #161830); } .ds-grid th, .ds-grid td { height:38px; padding:0 12px; border-bottom:1px solid var(--line, #e3e5ee); text-align:left; white-space:nowrap; } .ds-grid thead th { height:32px; background:var(--tint, #f6f7fb); color:var(--ink-2, #4a4e6a); font-size:12px; font-weight:600; border-bottom:0; } .ds-grid thead th:first-child { border-radius:6px 0 0 6px; } .ds-grid thead th:last-child { border-radius:0 6px 6px 0; } .ds-grid .ds-num { text-align:right; } .ds-grid tbody tr:hover { background:var(--tint, #f6f7fb); } .ds-grid tbody tr.ds-sel { background:var(--brand-tint, #e7e9f8); } .ds-grid input { width:15px; height:15px; accent-color:var(--brand, #232a7c); } .ds-grid input:focus-visible { outline:2px solid var(--brand, #232a7c); outline-offset:2px; } .ds-grid tfoot th, .ds-grid tfoot td { height:44px; font-weight:700; border-top:2px solid var(--ink, #161830); border-bottom:0; }"
+    },
+    {
+      "name": "Bulk Bar",
+      "kind": "custom",
+      "refersTo": "bulkbar",
+      "description": "Floating navy bar shown only while rows are checked.",
+      "html": "<div class=\"ds-bulk\"><span><b>2 selected</b> &middot; &#8369;14,649.00</span><button class=\"ds-inv\">Mark 2 paid</button><button class=\"ds-ghost\">Clear</button></div>",
+      "css": ".ds-bulk { display:flex; align-items:center; gap:8px; width:520px; padding:8px 8px 8px 16px; border-radius:8px; background:var(--brand, #232a7c); color:#fff; font:400 13px 'Public Sans', system-ui, sans-serif; font-variant-numeric:tabular-nums; box-shadow:0 10px 30px rgb(22 24 48 / .25); animation:ds-rise .2s ease-out; } .ds-bulk > span { margin-right:auto; } @keyframes ds-rise { from { opacity:0; transform:translateY(8px); } } .ds-bulk button { height:34px; padding:0 14px; border-radius:6px; font:600 13px 'Public Sans', system-ui, sans-serif; cursor:pointer; transition:background-color .15s ease-out; } .ds-inv { background:#fff; border:1px solid #fff; color:var(--brand, #232a7c); } .ds-inv:hover { background:var(--brand-tint, #e7e9f8); border-color:var(--brand-tint, #e7e9f8); } .ds-ghost { background:none; border:1px solid transparent; color:#fff; } .ds-ghost:hover { background:rgb(255 255 255 / .12); } .ds-bulk button:focus-visible { outline:2px solid #fff; outline-offset:2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Clerk's Ledger",
+    "overview": "A white working surface that behaves like a well-kept ledger book: hairline row rules, right-aligned tabular figures, a heavy ink rule under every total, and nothing decorative between the clerk and the numbers. It is an Operate interface for people at office desktops all day, so density is high (13px tables, 38px rows) and every screen opens on the work, not on a summary of it.\n\nOne colour carries intent. TESDA navy, the seal's outer ring, marks what you can do and what you have chosen: the primary action, the current nav item, the selected rows, the focus ring, the floating bulk-action bar. Everything else is cool grey-lavender neutrals. Voucher status is the only other colour voice, and it always arrives as a shape as well as a hue.\n\nStructure comes from rules and tints, not cards. Panels are separated by 1px hairlines; the sidebar is a tonal step, not a box. Shadows exist only on things that float above the page.",
+    "keyCharacteristics": [
+      "Light only; white canvas, grey-lavender sidebar.",
+      "Public Sans with tabular numerals everywhere.",
+      "Navy for action, selection and focus; status is shape plus colour.",
+      "Hairline tables, 2px ink rule above totals.",
+      "Gently rounded controls (6px); flat at rest.",
+      "Lucide line icons at 16px, 1.75 stroke."
+    ],
+    "rules": [
+      {
+        "name": "The One Navy Rule",
+        "body": "Navy means \"act here\" or \"you chose this\". It never decorates, never tints a heading, and never marks status. The one data use is the fill of proportional bars.",
+        "section": "colors"
+      },
+      {
+        "name": "The Wash, Not Stripe Rule",
+        "body": "Selection is a full Navy Wash fill across the row or item. No left-edge stripes, no bold borders.",
+        "section": "colors"
+      },
+      {
+        "name": "The Shape-First Status Rule",
+        "body": "Voucher status is always a 10px mark plus colour: filled red square (2px corners) for overdue, outlined amber square (2px border) for pending, green dot for paid. These three marks are reserved for voucher status; other states (connection, access, errors) use lucide icons.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Rule",
+        "body": "`font-variant-numeric: tabular-nums` is set on the body and never turned off. Money is right-aligned and never wraps.",
+        "section": "typography"
+      },
+      {
+        "name": "The Weight-Not-Size Rule",
+        "body": "Hierarchy inside tables comes from weight (DV numbers 600-700, totals 700), not larger sizes. The scale stays between 12px and 22px.",
+        "section": "typography"
+      },
+      {
+        "name": "The Float-Only Shadow Rule",
+        "body": "If it scrolls with the page, it has no shadow. Only toasts, popovers and the bulk bar lift.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** reserve Seal Navy for primary actions, current and selected states, focus, links and bar fills.",
+      "**Do** show selection as a full Navy Wash fill on the row or item.",
+      "**Do** pair every voucher status with its mark: filled red square overdue, outlined amber square pending, green dot paid.",
+      "**Do** set money in tabular numerals, right-aligned, no wrapping, with a 2px ink rule above totals.",
+      "**Do** use lucide icons at 16px with 1.75 stroke for navigation, actions and non-voucher states.",
+      "**Do** keep controls at 34px (28px small) with 6px radius, and floating surfaces at 8px.",
+      "**Do** separate regions with 1px hairlines and Ledger Tint bands."
+    ],
+    "donts": [
+      "**Don't** use the status squares or dot for anything other than voucher status.",
+      "**Don't** convey status by colour alone.",
+      "**Don't** use navy to decorate headings, dividers or status.",
+      "**Don't** add left-edge accent stripes to selected or highlighted rows.",
+      "**Don't** wrap sections in cards or add shadows to anything that scrolls with the page.",
+      "**Don't** build KPI-card summaries; show totals in ledger tables and bars.",
+      "**Don't** introduce a dark theme; the product is light only."
+    ]
+  }
+}

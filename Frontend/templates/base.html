@@ -1,0 +1,85 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ title|default:"Disbursements" }}{% endblock %} · KorPhil-TESDA</title>
+    <link rel="icon" href="{% static 'img/logo.webp' %}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+    <script src="{% static 'js/app.js' %}" defer></script>
+</head>
+<body hx-boost="true" hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+<div class="app">
+    <aside class="sidebar">
+        <a class="brand" href="{% url 'index' %}">
+            <img src="{% static 'img/logo.webp' %}" alt="" width="32" height="32">
+            <span><strong>KorPhil-TESDA</strong><small>Disbursements</small></span>
+        </a>
+        <nav class="nav" aria-label="Main">
+            <a href="{% url 'index' %}" {% if nav == 'workspace' %}aria-current="page"{% endif %}><i data-lucide="layout-dashboard"></i>Workspace</a>
+            <a href="{% url 'vouchers' %}" {% if nav == 'vouchers' and not tab or nav == 'vouchers' and tab == 'all' %}aria-current="page"{% endif %}><i data-lucide="receipt"></i>Vouchers<span class="count">{{ counts.all }}</span></a>
+            <div class="subnav">
+                <a href="{% url 'vouchers' %}?tab=overdue" {% if nav == 'vouchers' and tab == 'overdue' %}aria-current="page"{% endif %}>Overdue<span class="count{% if counts.overdue %} count-alert{% endif %}">{{ counts.overdue }}</span></a>
+                <a href="{% url 'vouchers' %}?tab=week" {% if nav == 'vouchers' and tab == 'week' %}aria-current="page"{% endif %}>Due this week<span class="count">{{ counts.week }}</span></a>
+                <a href="{% url 'vouchers' %}?tab=unpaid" {% if nav == 'vouchers' and tab == 'unpaid' %}aria-current="page"{% endif %}>Unpaid<span class="count">{{ counts.unpaid }}</span></a>
+            </div>
+            <a href="{% url 'areas' %}" {% if nav == 'areas' %}aria-current="page"{% endif %}><i data-lucide="map"></i>Trade Areas</a>
+            <a href="{% url 'reports' %}" {% if nav == 'reports' %}aria-current="page"{% endif %}><i data-lucide="file-text"></i>Reports</a>
+            <a href="{% url 'settings' %}" {% if nav == 'settings' %}aria-current="page"{% endif %}><i data-lucide="settings"></i>Settings</a>
+        </nav>
+        <div class="sheet-foot">
+            <strong>{{ pull.title|default:"Google Sheet" }}</strong>
+            <span>{% if pull.at %}Synced {{ pull.at|time:"g:i A" }} · {{ pull.rows }} rows{% else %}Not synced{% endif %}</span>
+            {% if sheet_url %}<a href="{{ sheet_url }}" target="_blank" rel="noopener" hx-boost="false">Open in Google Sheets<i data-lucide="external-link"></i></a>{% endif %}
+        </div>
+    </aside>
+
+    <div class="main">
+        <header class="topbar">
+            <h1>{{ title }}</h1>
+            <a class="btn btn-primary" href="{% url 'vouchers' %}?new=1" data-key="n"><i data-lucide="plus"></i>New DV<kbd>N</kbd></a>
+            <form class="search" action="{% url 'vouchers' %}" method="get" role="search">
+                <i data-lucide="search"></i>
+                <input type="search" name="q" value="{{ request.GET.q }}" placeholder="Find DV #, payee, or particulars" aria-label="Find vouchers" autocomplete="off">
+                <kbd>Ctrl K</kbd>
+            </form>
+            <a class="btn" href="{% url 'reports' %}">Run report</a>
+            <a class="btn" href="{{ export_url|default:'/vouchers/export/' }}" hx-boost="false"><i data-lucide="download"></i>Export</a>
+            <form class="sync" action="{% url 'sync' %}" method="post">
+                {% csrf_token %}
+                <span>{% if pull.at %}Synced {{ pull.at|time:"g:i A" }}{% endif %}</span>
+                <button class="btn" type="submit"><i data-lucide="refresh-cw"></i>Sync</button>
+            </form>
+            <details class="user-menu">
+                <summary aria-label="Account: {{ user.get_full_name|default:user.email }}">
+                    {% if request.session.picture %}<img src="{{ request.session.picture }}" alt="" width="32" height="32" referrerpolicy="no-referrer">
+                    {% else %}<span class="initials" aria-hidden="true">{{ user.first_name|first|default:user.email|first|upper }}</span>{% endif %}
+                </summary>
+                <div class="user-card">
+                    <strong>{{ user.get_full_name|default:user.email }}</strong>
+                    <span class="muted">{{ user.email }}</span>
+                    <form action="{% url 'logout' %}" method="post" hx-boost="false">{% csrf_token %}<button class="btn" type="submit"><i data-lucide="log-out"></i>Sign out</button></form>
+                </div>
+            </details>
+        </header>
+
+        <div class="toasts" aria-live="polite">
+            {% for message in messages %}
+                <p class="toast toast-{{ message.tags }}"><i data-lucide="{% if message.tags == 'error' %}circle-alert{% else %}check{% endif %}"></i>{{ message }}</p>
+            {% endfor %}
+        </div>
+
+        {% if error %}
+            <p class="banner" role="alert"><i data-lucide="circle-alert"></i>{{ error }}</p>
+        {% endif %}
+
+        {% block content %}{% endblock %}
+    </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,23 @@
+<tr id="voucher-row-{{ row.sheet_row }}">
+    <td><input name="dv_date" value="{{ row.dv_date }}"></td>
+    <td><input name="due_date" value="{{ row.due_date }}"></td>
+    <td><input name="dv_no" value="{{ row.dv_no }}"></td>
+    <td><input name="payee" value="{{ row.payee }}"></td>
+    <td><input name="particulars" value="{{ row.particulars }}"></td>
+    <td><input name="gross_amount" value="{{ row.gross_amount }}"></td>
+    <td><input name="trade_area" value="{{ row.trade_area }}"></td>
+    <td><input name="diploma_st_assessment" value="{{ row.diploma_st_assessment }}"></td>
+    <td><input name="category" value="{{ row.category }}"></td>
+    <td><input name="status" value="{{ row.status }}"></td>
+    <td>
+        <button type="button"
+                hx-post="{% url 'admin:dashboard_voucher_save' row.sheet_row %}"
+                hx-include="closest tr"
+                hx-target="closest tr"
+                hx-swap="outerHTML">
+            Save
+        </button>
+        {% if saved %}<span class="saved-ok">Saved</span>{% endif %}
+        {% if error %}<span class="errornote">{{ error }}</span>{% endif %}
+    </td>
+</tr>

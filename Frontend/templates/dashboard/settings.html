@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="settings">
+    <section>
+        <h2>Data source</h2>
+        <p class="muted">The Google Sheet this app reads from and writes back to. These values come from <code>.env</code> in the project root; edit that file and restart to change them.</p>
+
+        <dl class="setting-list">
+            <div>
+                <dt>Google Sheet<small>Every save writes back here.</small></dt>
+                <dd>
+                    <strong>{{ pull.title|default:"Untitled sheet" }}</strong>
+                    <span class="flag{% if error %} flag-bad{% endif %}"><i data-lucide="{% if error %}unplug{% else %}plug{% endif %}"></i>{% if error %}Not connected{% else %}Connected through your Google account{% endif %}</span>
+                </dd>
+                <dd class="setting-actions">{% if sheet_url %}<a class="btn" href="{{ sheet_url }}" target="_blank" rel="noopener" hx-boost="false">Open sheet<i data-lucide="external-link"></i></a>{% endif %}</dd>
+            </div>
+            <div>
+                <dt>Sheet ID and range</dt>
+                <dd class="setting-values"><code>{{ sheet_id|default:"Not set" }}</code><code>{{ sheet_range|default:"Not set" }}</code><span class="muted">First 2 rows skipped (header + spacer)</span></dd>
+            </div>
+            <div>
+                <dt>Signed in as<small>Reads and saves use this Google account.</small></dt>
+                <dd><strong>{{ user.get_full_name|default:user.email }}</strong><span class="muted">{{ user.email }}</span></dd>
+            </div>
+            <div>
+                <dt>Who can use the app<small>Follows the sheet's own sharing.</small></dt>
+                <dd><span class="flag"><i data-lucide="users"></i>Anyone the sheet is shared with can sign in. Editors can save; viewers can only look.</span></dd>
+                <dd class="setting-actions">{% if sheet_url %}<a class="btn" href="{{ sheet_url }}" target="_blank" rel="noopener" hx-boost="false">Manage sharing<i data-lucide="external-link"></i></a>{% endif %}</dd>
+            </div>
+            <div>
+                <dt>Auto-refresh<small>How long a pull is reused before the next one.</small></dt>
+                <dd>Every {{ cache_seconds }} seconds, or when you press Sync</dd>
+            </div>
+            <div>
+                <dt>Last sync</dt>
+                <dd>{% if pull.at %}{{ pull.at|time:"g:i A" }} · {{ pull.rows }} rows · {% if pull.error %}<span class="flag flag-bad"><i data-lucide="circle-alert"></i>{{ pull.error }}</span>{% else %}no errors{% endif %}{% else %}Never{% endif %}</dd>
+                <dd class="setting-actions">
+                    <form action="{% url 'sync' %}" method="post">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="refresh-cw"></i>Sync now</button></form>
+                </dd>
+            </div>
+        </dl>
+    </section>
+</div>
+{% endblock %}

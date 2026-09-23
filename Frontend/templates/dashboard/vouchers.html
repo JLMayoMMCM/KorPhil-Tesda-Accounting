@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% load money %}
+
+{% block content %}
+<div class="register{% if panel %} has-panel{% endif %}">
+    <div class="register-list">
+        <nav class="tabs" aria-label="Voucher views">
+            {% for key, name, n, url in tab_links %}
+                <a href="{{ url }}" {% if key == tab %}aria-current="page"{% endif %}>{{ name }}<span class="count">{{ n }}</span></a>
+            {% endfor %}
+            {% if not panel %}
+            <details class="filter push">
+                <summary class="btn btn-sm"><i data-lucide="list-filter"></i>Filter{% if filter_count %} · {{ filter_count }}{% endif %}</summary>
+                <form class="filter-menu" method="get" action="{% url 'vouchers' %}">
+                    <input type="hidden" name="tab" value="{{ tab }}">
+                    {% if request.GET.q %}<input type="hidden" name="q" value="{{ request.GET.q }}">{% endif %}
+                    {% if request.GET.bucket %}<input type="hidden" name="bucket" value="{{ request.GET.bucket }}">{% endif %}
+                    <label>Trade area
+                        <select name="area"><option value="">Any area</option>{% for a in filter_areas %}<option value="{{ a }}" {% if a == request.GET.area %}selected{% endif %}>{{ a }}</option>{% endfor %}</select>
+                    </label>
+                    <label>DV date
+                        <select name="month"><option value="">Any month</option>{% for m, name in filter_months %}<option value="{{ m }}" {% if m == request.GET.month %}selected{% endif %}>{{ name }}</option>{% endfor %}</select>
+                    </label>
+                    <button class="btn btn-primary" type="submit">Apply</button>
+                </form>
+            </details>
+            {% endif %}
+        </nav>
+
+        {% if chips or not panel %}
+        <div class="filterbar">
+            {% for text, url in chips %}
+                <a class="chip" href="{{ url }}" aria-label="Remove filter: {{ text }}">{{ text }}<i data-lucide="x"></i></a>
+            {% endfor %}
+            {% if chips %}<a class="link-quiet" href="{{ clear_url }}">Clear filters</a>{% endif %}
+            <span class="push strong">{{ shown|length }} shown · {{ shown_total|peso }}</span>
+        </div>
+        {% endif %}
+
+        {% if shown %}
+        <form action="{% url 'mark_paid' %}" method="post" data-bulk hx-boost="false">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <table class="grid register-table">
+                <thead>
+                    <tr>
+                        <th class="col-check wide"><input type="checkbox" data-select-all aria-label="Select all shown"></th>
+                        <th>DV #</th>
+                        <th class="wide">DV date</th>
+                        <th>Due</th>
+                        <th>Payee</th>
+                        <th class="wide">Particulars</th>
+                        <th class="wide">Area</th>
+                        <th class="wide">Program</th>
+                        <th class="wide">Category</th>
+                        <th class="num">Amount</th>
+                        <th>Status</th>
+                        <th class="wide"><span class="sr-only">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in shown %}
+                    <tr data-row-link {% if panel_row.sheet_row == r.sheet_row %}aria-selected="true"{% endif %}>
+                        <td class="col-check wide">{% if r.state != "paid" %}<input type="checkbox" name="sel" value="{{ r.sheet_row }}" data-amount="{{ r.amount }}" aria-label="Select {{ r.dv_no }}">{% endif %}</td>
+                        <td class="strong"><a href="{{ close_url }}&open={{ r.sheet_row }}" hx-swap="innerHTML show:none">{{ r.dv_no }}</a></td>
+                        <td class="wide muted">{{ r.dv|date:"M j"|default:r.dv_date }}</td>
+                        <td>{% if r.days_late %}<strong class="late">{{ r.days_late }}d late</strong>{% elif r.bucket == "today" %}Today{% else %}{{ r.due|date:"M j"|default:r.due_date }}{% endif %}</td>
+                        <td class="clip col-payee">{{ r.payee }}</td>
+                        <td class="wide clip muted col-part">{{ r.particulars }}</td>
+                        <td class="wide">{{ r.trade_area|default:"—" }}</td>
+                        <td class="wide">{{ r.diploma_st_assessment|default:"—" }}</td>
+                        <td class="wide">{{ r.category|default:"—" }}</td>
+                        <td class="num strong">{{ r.amount|peso }}</td>
+                        <td><span class="status status-{{ r.state }}">{{ r.state|capfirst }}</span></td>
+                        <td class="wide col-action">
+                            {% if r.state != "paid" %}<button class="btn btn-sm" name="only" value="{{ r.sheet_row }}">Mark paid</button>{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                {% if not panel %}
+                <tfoot>
+                    <tr>
+                        <th colspan="9" scope="row">Total · {{ shown|length }} voucher{{ shown|length|pluralize }}</th>
+                        <td class="num">{{ shown_total|peso }}</td>
+                        <td colspan="2"></td>
+                    </tr>
+                </tfoot>
+                {% endif %}
+            </table>
+            <div class="bulkbar" role="region" aria-label="Selection">
+                <span><strong data-sel-count>0</strong> selected · <span data-sel-sum>₱0.00</span></span>
+                <button class="btn btn-invert push" type="submit"><span>Mark <span data-sel-count>0</span> paid</span></button>
+                <button class="btn btn-ghost-invert" type="submit" formaction="{% url 'export' %}"><i data-lucide="download"></i>Export</button>
+                <button class="btn btn-ghost-invert" type="button" data-clear-sel>Clear</button>
+            </div>
+        </form>
+        {% if not panel %}<p class="hint">Click a row to open it in the side panel. Hover for quick actions.</p>{% endif %}
+        {% elif not error %}
+        <div class="empty">
+            <i data-lucide="search-x"></i>
+            <p><strong>No vouchers match.</strong> Try another tab or clear the filters.</p>
+            {% if chips %}<a class="btn" href="{{ clear_url }}">Clear filters</a>{% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    {% if panel %}
+    <form class="panel" method="post" hx-boost="true"
+          action="{% if is_new %}{% url 'voucher_new' %}{% else %}{% url 'voucher_save' panel_row.sheet_row %}{% endif %}"
+          data-dirty-form{% if panel_row %} data-row="{{ panel_row.sheet_row }}"{% endif %}>
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{% if is_new %}{{ close_url }}{% else %}{{ request.POST.next|default:request.get_full_path }}{% endif %}">
+        <header class="panel-head">
+            <div>
+                <h2>{% if is_new %}New voucher{% else %}{{ panel_row.dv_no|default:"Untitled DV" }}{% endif %}</h2>
+                {% if panel_row %}
+                <p class="status status-{{ panel_row.state }}">
+                    {{ panel_row.state|capfirst }}{% if panel_row.days_late %} · {{ panel_row.days_late }} day{{ panel_row.days_late|pluralize }} late{% endif %}{% if panel_row.due %} · due {{ panel_row.due|date:"M j" }}{% endif %}
+                </p>
+                {% else %}
+                <p class="muted">Adds a new row at the bottom of the sheet.</p>
+                {% endif %}
+            </div>
+            {% if panel_row and panel_row.state != "paid" %}
+            <button class="btn btn-primary" type="submit" form="panel-paid" data-key="p">Mark paid<kbd>P</kbd></button>
+            {% endif %}
+            <a class="icon-btn" href="{{ close_url }}" aria-label="Close panel" data-key="Escape"><i data-lucide="x"></i></a>
+        </header>
+
+        {% if form_error %}<p class="banner banner-inline" role="alert"><i data-lucide="circle-alert"></i>{{ form_error }}</p>{% endif %}
+
+        <div class="fields">
+            <label>DV #<input name="dv_no" value="{{ form.dv_no }}" required></label>
+            <label>Status
+                <select name="status">
+                    {% for s in statuses %}<option value="{{ s }}" {% if form.status|upper == s %}selected{% endif %}>{{ s|lower|capfirst }}</option>{% endfor %}
+                </select>
+            </label>
+            <label>DV date<input type="{% if 'dv_date' in date_text %}text{% else %}date{% endif %}" name="dv_date" value="{{ form.dv_date }}"></label>
+            <label>Due date<input type="{% if 'due_date' in date_text %}text{% else %}date{% endif %}" name="due_date" value="{{ form.due_date }}"></label>
+            <label class="span-2">Payee<input name="payee" value="{{ form.payee }}"></label>
+            <label>Gross amount
+                <span class="affix"><span aria-hidden="true">₱</span><input name="gross_amount" value="{{ form.gross_amount }}" inputmode="decimal" required></span>
+            </label>
+            <label>Category<input name="category" value="{{ form.category }}" list="opt-category"></label>
+            <label>Trade area<input name="trade_area" value="{{ form.trade_area }}" list="opt-area"></label>
+            <label>Diploma / ST / Assessment<input name="diploma_st_assessment" value="{{ form.diploma_st_assessment }}" list="opt-program"></label>
+            <label class="span-2">Particulars<textarea name="particulars" rows="3">{{ form.particulars }}</textarea></label>
+        </div>
+        <datalist id="opt-category">{% for v in options.category %}<option value="{{ v }}">{% endfor %}</datalist>
+        <datalist id="opt-area">{% for v in options.trade_area %}<option value="{{ v }}">{% endfor %}</datalist>
+        <datalist id="opt-program">{% for v in options.diploma_st_assessment %}<option value="{{ v }}">{% endfor %}</datalist>
+
+        <div class="panel-meta">
+            <p class="strong" data-dirty-list hidden></p>
+            {% if panel_row %}<p class="muted">Source: {{ pull.title|default:"Google Sheet" }} · row {{ panel_row.sheet_row }} · pulled {{ pull.at|time:"g:i A" }}</p>{% endif %}
+        </div>
+
+        <footer class="panel-foot">
+            <span class="strong" data-dirty-note>{% if is_new %}Not saved yet · appends a row{% else %}No changes · row {{ panel_row.sheet_row }}{% endif %}</span>
+            <a class="btn push" href="{{ close_url }}">Cancel<kbd>Esc</kbd></a>
+            <button class="btn btn-primary" type="submit" data-key="ctrl+s">Save to sheet<kbd>Ctrl S</kbd></button>
+        </footer>
+    </form>
+    {% if panel_row and panel_row.state != "paid" %}
+    <form id="panel-paid" action="{% url 'mark_paid' %}" method="post" hidden>
+        {% csrf_token %}
+        <input type="hidden" name="only" value="{{ panel_row.sheet_row }}">
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    </form>
+    {% endif %}
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "flat-type-hierarchy",
+        "value": "*",
+        "files": [
+          "Frontend/templates/auth/login.html"
+        ],
+        "createdAt": "2026-09-23T07:45:57.603Z",
+        "reason": "Claude: detector can't resolve the Django {% static %} stylesheet; shipped CSS sets .signin-box h1 at 28px over 14px body (2x), verified in .impeccable/review/login.png"
+      }
+    ]
+  }
+}

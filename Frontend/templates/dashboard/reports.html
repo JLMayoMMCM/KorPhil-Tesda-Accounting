@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% load money %}
+
+{% block content %}
+<form class="report-builder" method="get" action="{% url 'reports' %}">
+    <p class="sentence">
+        <span>Show</span>
+        <label class="word"><span class="sr-only">Report</span>
+            <select name="report" data-autosubmit>{% for k, name in reports %}<option value="{{ k }}" {% if k == kind %}selected{% endif %}>{{ name }}</option>{% endfor %}</select>
+        </label>
+        <span>for</span>
+        <label class="word"><span class="sr-only">Month</span>
+            <select name="month" data-autosubmit><option value="">All months</option>{% for m, name in months %}<option value="{{ m }}" {% if m == month %}selected{% endif %}>{{ name }}</option>{% endfor %}</select>
+        </label>
+        <span>across</span>
+        <label class="word"><span class="sr-only">Trade area</span>
+            <select name="area" data-autosubmit><option value="">All trade areas</option>{% for a in areas %}<option value="{{ a }}" {% if a == area %}selected{% endif %}>{{ a }}</option>{% endfor %}</select>
+        </label>
+        <span>and</span>
+        <label class="word"><span class="sr-only">Status</span>
+            <select name="status" data-autosubmit><option value="">All statuses</option>{% for k, name in states %}<option value="{{ k }}" {% if k == state %}selected{% endif %}>{{ name }}</option>{% endfor %}</select>
+        </label>
+    </p>
+    <div class="report-actions">
+        <span class="muted">Output</span>
+        <a class="btn btn-primary" href="{{ csv_url }}" hx-boost="false"><i data-lucide="download"></i>Download CSV</a>
+        <button class="btn" type="button" data-print><i data-lucide="printer"></i>Print or save as PDF</button>
+        <span class="muted">The preview updates as you change the sentence.</span>
+        <noscript><button class="btn" type="submit">Update preview</button></noscript>
+    </div>
+</form>
+
+<div class="reports">
+    <nav class="templates" aria-label="Report templates">
+        <h2>Templates</h2>
+        {% for k, name in reports %}
+            <a href="?report={{ k }}{% if month %}&month={{ month }}{% endif %}{% if area %}&area={{ area|urlencode }}{% endif %}{% if state %}&status={{ state }}{% endif %}" {% if k == kind %}aria-current="page"{% endif %}>{{ name }}</a>
+        {% endfor %}
+    </nav>
+
+    <article class="sheet-preview">
+        <h2>{{ report_name }}</h2>
+        <p class="muted">{{ subtitle }}</p>
+
+        {% if not scoped %}
+            <p class="empty-line">No vouchers match these choices.</p>
+        {% elif kind == "audit" %}
+            <table class="grid compact">
+                <thead><tr><th>DV #</th><th>DV date</th><th>Due</th><th>Payee</th><th>Particulars</th><th>Area</th><th>Status</th><th class="num">Amount</th></tr></thead>
+                <tbody>
+                    {% for r in scoped %}
+                    <tr><td>{{ r.dv_no }}</td><td>{{ r.dv_date }}</td><td>{{ r.due_date }}</td><td>{{ r.payee }}</td><td class="clip">{{ r.particulars }}</td><td>{{ r.trade_area }}</td><td><span class="status status-{{ r.state }}">{{ r.state|capfirst }}</span></td><td class="num">{{ r.amount|peso }}</td></tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot><tr><th colspan="7" scope="row">Total · {{ scoped|length }}</th><td class="num">{{ scoped_total|peso }}</td></tr></tfoot>
+            </table>
+        {% else %}
+            <table class="grid compact report-table">
+                <thead><tr><th>{% if kind == "summary" %}Status{% elif kind == "aging" %}Age{% elif kind == "monthly" %}Month{% elif kind == "category" %}Category{% else %}Trade area{% endif %}</th><th class="num">Vouchers</th><th class="num">Amount</th></tr></thead>
+                <tbody>
+                    {% for l in lines %}
+                    <tr>
+                        <td>{% if l.state %}<span class="status status-{{ l.state }}">{{ l.label }}</span>{% else %}{{ l.label }}{% endif %}</td>
+                        <td class="num">{{ l.count }}</td>
+                        <td class="num strong">{{ l.amount|peso }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot><tr><th scope="row">Total</th><td class="num">{{ scoped|length }}</td><td class="num">{{ scoped_total|peso }}</td></tr></tfoot>
+            </table>
+
+            {% if kind == "summary" and by_area %}
+            <h3>By trade area</h3>
+            <ul class="bars bars-wide">
+                {% for name, amt, pct in by_area %}
+                <li><span>{{ name }}</span><span class="bar"><span {% if amt %}class="nz"{% endif %} style="width: {{ pct }}%"></span></span><span class="num">{{ amt|peso }}</span></li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        {% endif %}
+
+        <p class="preview-foot muted">Generated {{ generated|date:"M j, Y g:i A" }} from {{ pull.title|default:"Google Sheet" }}</p>
+    </article>
+</div>
+{% endblock %}

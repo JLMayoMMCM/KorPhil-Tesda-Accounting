@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% load money %}
+
+{% block content %}
+<div class="workspace">
+    <form class="needs" action="{% url 'mark_paid' %}" method="post" data-bulk hx-boost="false">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <div class="section-head">
+            <h2>Needs action</h2>
+            <span class="muted">{{ unpaid_count }} unpaid · {{ unpaid_total|peso }}</span>
+            <span class="muted push">Sorted by due date</span>
+        </div>
+
+        {% if groups %}
+        <table class="grid needs-table">
+            <thead>
+                <tr>
+                    <th class="col-check"><span class="sr-only">Select</span></th>
+                    <th>DV #</th><th>Payee · particulars</th><th>Area</th><th>Due</th>
+                    <th class="num">Amount</th><th><span class="sr-only">Action</span></th>
+                </tr>
+            </thead>
+            {% for g in groups %}
+            <tbody class="{% if g.later %}later{% endif %}">
+                <tr class="group-row">
+                    <th colspan="7" scope="rowgroup"><div class="group-head">
+                        <span>{{ g.name }}</span>
+                        <span class="muted">{{ g.rows|length }} · {{ g.total|peso }}</span>
+                        {% if g.later %}<button type="button" class="link push" data-toggle-later aria-expanded="false">Show {{ g.rows|length }}</button>{% endif %}
+                    </div></th>
+                </tr>
+                {% for r in g.rows %}
+                <tr class="state-{{ r.state }}">
+                    <td class="col-check"><input type="checkbox" name="sel" value="{{ r.sheet_row }}" data-amount="{{ r.amount }}" aria-label="Select {{ r.dv_no }}"></td>
+                    <td class="strong"><a href="{% url 'vouchers' %}?open={{ r.sheet_row }}">{{ r.dv_no }}</a><small class="sub">{{ r.payee }}</small></td>
+                    <td class="clip col-payee">{{ r.payee }} <span class="muted">— {{ r.particulars }}</span></td>
+                    <td class="muted">{{ r.trade_area|default:"—" }}</td>
+                    <td>
+                        <span class="status status-{{ r.state }}">
+                            {% if r.days_late %}<strong>{{ r.days_late }} day{{ r.days_late|pluralize }} late</strong>
+                            {% elif r.bucket == "today" %}Today
+                            {% elif r.due %}{{ r.due|date:"D, M j" }}
+                            {% else %}No due date{% endif %}
+                        </span>
+                    </td>
+                    <td class="num strong">{{ r.amount|peso }}</td>
+                    <td class="col-action col-rowpaid"><button class="btn btn-sm" name="only" value="{{ r.sheet_row }}">Mark paid</button></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            {% endfor %}
+        </table>
+        {% elif not error %}
+        <div class="empty">
+            <i data-lucide="check-check"></i>
+            <p><strong>Nothing unpaid.</strong> Every voucher in the sheet is marked paid.</p>
+            <a class="btn" href="{% url 'vouchers' %}?new=1">Add a DV</a>
+        </div>
+        {% endif %}
+
+        <div class="bulkbar" role="region" aria-label="Selection">
+            <span><strong data-sel-count>0</strong> selected · <span data-sel-sum>₱0.00</span></span>
+            <button class="btn btn-invert push" type="submit"><span>Mark <span data-sel-count>0</span> paid</span></button>
+            <button class="btn btn-ghost-invert" type="submit" formaction="{% url 'export' %}"><i data-lucide="download"></i>Export</button>
+            <button class="btn btn-ghost-invert" type="button" data-clear-sel>Clear</button>
+        </div>
+    </form>
+
+    <aside class="rail">
+        <section>
+            <div class="section-head">
+                <h2>Open balance</h2>
+                <span class="muted push">as of {{ pull.at|time:"g:i A" }}</span>
+            </div>
+            <table class="ledger">
+                {% for key, name, n, amt in balance %}
+                <tr>
+                    <th scope="row"><span class="status status-{{ key }}">{{ name }}</span></th>
+                    <td class="num muted">{{ n }}</td>
+                    <td class="num strong">{{ amt|peso }}</td>
+                </tr>
+                {% endfor %}
+                <tr class="ledger-total">
+                    <th scope="row">Unpaid total</th>
+                    <td class="num muted">{{ unpaid_count }}</td>
+                    <td class="num">{{ unpaid_total|peso }}</td>
+                </tr>
+            </table>
+        </section>
+
+        {% if by_area %}
+        <section>
+            <h2>Unpaid by trade area</h2>
+            <ul class="bars">
+                {% for name, amt, pct in by_area %}
+                <li>
+                    <a href="{% url 'vouchers' %}?tab=unpaid&area={{ name|urlencode }}">{{ name }}</a>
+                    <span class="bar"><span {% if amt %}class="nz"{% endif %} style="width: {{ pct }}%"></span></span>
+                    <span class="num">{{ amt|peso }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </section>
+        {% endif %}
+
+        <a class="link" href="{% url 'reports' %}">Open full report for this view <i data-lucide="arrow-right"></i></a>
+    </aside>
+</div>
+{% endblock %}
