@@ -3,3 +3,4 @@ django-htmx
 python-dotenv
 requests
 google-auth
+whitenoise

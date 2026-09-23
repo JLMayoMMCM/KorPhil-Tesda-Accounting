@@ -6,3 +6,6 @@ venv/
 db.sqlite3
 service_account.json
 .impeccable/review/
+
+.vercel
+.env*

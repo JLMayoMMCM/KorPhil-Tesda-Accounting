@@ -11,7 +11,7 @@ A dashboard for managing and tracking accounting disbursements.
 ```bash
 python -m venv venv
 venv\Scripts\activate
-pip install -r Backend/requirements.txt
+pip install -r requirements.txt
 cd Backend
 python manage.py runserver
 ```
@@ -36,3 +36,13 @@ Open the app at `http://localhost:8000` (not `127.0.0.1`; the redirect URI must 
 - `Backend/` — Django project (`config/`) + `dashboard` app: `sheets.py` reads/writes the Google Sheet (pulls cached 60s), `ledger.py` derives status, days late and totals, `views.py` serves Workspace, Vouchers, Trade Areas, Reports and Settings.
 - `Frontend/` — HTMX templates (`templates/`) and static assets (`static/`), served by Django.
 - `Assets/` — reference files (sample sheet layout, logos).
+
+## Deploy (Vercel)
+
+Live: https://korphil-tesda-accounting.vercel.app. Vercel detects Django and serves `Backend/config/wsgi.py`. There is no database: sessions are signed cookies, and WhiteNoise serves the static files.
+
+```bash
+npx.cmd vercel deploy --prod
+```
+
+Production env vars (set with `npx.cmd vercel env add NAME production`): `GOOGLE_SHEET_ID`, `GOOGLE_SHEET_RANGE`, `GOOGLE_SHEET_API_KEY`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `DJANGO_SECRET_KEY`. The OAuth client needs the redirect URI `https://korphil-tesda-accounting.vercel.app/auth/callback/`.

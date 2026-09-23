@@ -1,10 +1,8 @@
-from django.contrib import admin
 from django.urls import path
 
 from dashboard import auth, views
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
     path("", views.index, name="index"),
     path("login/", auth.login_view, name="login"),
     path("login/google/", auth.auth_start, name="auth_start"),

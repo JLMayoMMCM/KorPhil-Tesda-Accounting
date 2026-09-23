@@ -1,0 +1,8 @@
+venv
+.env*
+service_account.json
+*.sqlite3
+__pycache__
+.impeccable
+.claude
+Assets

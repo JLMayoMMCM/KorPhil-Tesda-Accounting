@@ -57,7 +57,7 @@
             </form>
             <details class="user-menu">
                 <summary aria-label="Account: {{ user.get_full_name|default:user.email }}">
-                    {% if request.session.picture %}<img src="{{ request.session.picture }}" alt="" width="32" height="32" referrerpolicy="no-referrer">
+                    {% if user.picture %}<img src="{{ user.picture }}" alt="" width="32" height="32" referrerpolicy="no-referrer">
                     {% else %}<span class="initials" aria-hidden="true">{{ user.first_name|first|default:user.email|first|upper }}</span>{% endif %}
                 </summary>
                 <div class="user-card">

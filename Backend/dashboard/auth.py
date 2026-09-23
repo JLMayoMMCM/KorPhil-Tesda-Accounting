@@ -10,8 +10,9 @@ from urllib.parse import urlencode
 
 import requests
 from django.conf import settings
-from django.contrib.auth import get_user_model, login, logout
 from django.contrib.auth.decorators import login_not_required
+from django.contrib.auth.middleware import AuthenticationMiddleware
+from django.contrib.auth.models import AnonymousUser
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -25,6 +26,27 @@ AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 SCOPES = "openid email profile https://www.googleapis.com/auth/spreadsheets"
 SESSION_KEY = "google_token"
+USER_KEY = "google_user"
+
+
+class GoogleUser:
+    """The signed-in person, rebuilt from the session on every request. No database row."""
+    is_authenticated = True
+    is_anonymous = False
+    is_active = True
+    is_staff = is_superuser = False
+
+    def __init__(self, data):
+        self.email = self.username = self.pk = data["email"]
+        self.first_name = data.get("first_name", "")
+        self.last_name = data.get("last_name", "")
+        self.picture = data.get("picture", "")
+
+    def get_full_name(self):
+        return f"{self.first_name} {self.last_name}".strip()
+
+    def __str__(self):
+        return self.email
 
 
 def _configured():
@@ -136,17 +158,16 @@ def auth_callback(request):
     if error:
         return _fail(request, f"{email} {error}")
 
-    user, created = get_user_model().objects.get_or_create(username=email, defaults={"email": email})
-    if created:
-        user.set_unusable_password()
-    user.first_name = claims.get("given_name", "")[:150]
-    user.last_name = claims.get("family_name", "")[:150]
-    user.save()
-    login(request, user)  # rotates the session key; store the token after
-    _store(request, payload)
-    request.session["picture"] = claims.get("picture", "")
-
     next_url = request.session.pop("oauth_next", "")
+    request.session.cycle_key()  # new session on sign-in (session fixation)
+    request.session[USER_KEY] = {
+        "email": email,
+        "first_name": claims.get("given_name", ""),
+        "last_name": claims.get("family_name", ""),
+        "picture": claims.get("picture", ""),
+    }
+    _store(request, payload)
+
     if next_url and url_has_allowed_host_and_scheme(next_url, {request.get_host()}, request.is_secure()):
         return redirect(next_url)
     return redirect("index")
@@ -154,22 +175,24 @@ def auth_callback(request):
 
 @require_POST
 def logout_view(request):
-    logout(request)
+    request.session.flush()
     return redirect("login")
 
 
-def google_token_middleware(get_response):
-    """Attach the user's Google token as request.google_token; end the session if it can't be refreshed.
+class GoogleAuthMiddleware(AuthenticationMiddleware):
+    """Set request.user from the session and request.google_token from the stored Google token.
 
-    /admin/ is exempt so password-only admin accounts keep working (their writes will ask them to sign in with Google).
+    Stands in for Django's AuthenticationMiddleware (subclassed so LoginRequiredMiddleware's check passes):
+    there is no user table, the app runs database-free on Vercel.
+    A session whose Google token can't be refreshed is ended.
     """
-    def middleware(request):
-        request.google_token = None
-        if request.user.is_authenticated:
-            request.google_token = access_token(request)
-            if request.google_token is None and not request.path.startswith("/admin/"):
-                logout(request)
-                request.session["login_error"] = "Your Google session ended. Sign in again."
-                return redirect(f'{reverse("login")}?{urlencode({"next": request.get_full_path()})}')
-        return get_response(request)
-    return middleware
+    def process_request(self, request):
+        data = request.session.get(USER_KEY)
+        request.user = GoogleUser(data) if data else AnonymousUser()
+        request.google_token = access_token(request) if data else None
+        if data and request.google_token is None:
+            request.session.flush()
+            request.user = AnonymousUser()
+            request.session["login_error"] = "Your Google session ended. Sign in again."
+            return redirect(f'{reverse("login")}?{urlencode({"next": request.get_full_path()})}')
+        return None
