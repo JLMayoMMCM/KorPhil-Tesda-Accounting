@@ -9,17 +9,30 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <script src="https://cdn.jsdelivr.net/npm/lucide@0.469.0/dist/umd/lucide.min.js" defer></script>
+    <script>addEventListener("DOMContentLoaded", () => window.lucide && lucide.createIcons({ attrs: { width: 20, height: 20, "stroke-width": 1.75 } }));</script>
 </head>
 <body class="signin">
-    <aside class="signin-seal">
-        <img src="{% static 'img/logo.webp' %}" alt="Korea-Philippines Vocational Training Center seal" width="168" height="168">
-        <p><strong>Korea-Philippines Vocational Training Center</strong>Regional Training Center Davao</p>
+    <aside class="signin-brand">
+        <p class="signin-mark">KorPhil-TESDA <span>Disbursements</span></p>
+
+        <div class="signin-hero">
+            <img src="{% static 'img/logo.webp' %}" alt="Korea-Philippines Vocational Training Center seal" width="200" height="200">
+            <h2><span>Korea-Philippines</span> <span>Vocational Training Center</span></h2>
+            <p>Regional Training Center Davao</p>
+        </div>
+
+        <ul class="signin-points">
+            <li><i data-lucide="alarm-clock"></i><span><strong>See what's overdue first.</strong> Unpaid vouchers are grouped by how late they are.</span></li>
+            <li><i data-lucide="sheet"></i><span><strong>Edit once, saved to the sheet.</strong> Every change is written to the Google Sheet under your name.</span></li>
+            <li><i data-lucide="map"></i><span><strong>Totals by trade area.</strong> Aging, splits and reports you can download or print.</span></li>
+        </ul>
     </aside>
 
     <main class="signin-main">
         <div class="signin-box">
-            <h1>Disbursements</h1>
-            <p class="muted">Sign in with the Google account the disbursement sheet is shared with. Everything you save is written to the sheet under your name.</p>
+            <h1>Sign in</h1>
+            <p class="signin-lede">Use the Google account the disbursement sheet is shared with.</p>
 
             {% if error %}<p class="banner banner-inline" role="alert">{{ error }}</p>{% endif %}
 
@@ -28,7 +41,7 @@
                 {% csrf_token %}
                 <input type="hidden" name="next" value="{{ next }}">
                 <button class="btn btn-google" type="submit">
-                    <svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true">
+                    <svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true">
                         <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
                         <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
                         <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
@@ -37,7 +50,7 @@
                     Continue with Google
                 </button>
             </form>
-            <p class="signin-note muted">No access? Ask whoever owns the sheet to share it with your Google account. Editors can save; viewers can only look.</p>
+            <p class="signin-note">No access yet? Ask the sheet's owner to share it with your Google account. Editors can save changes; viewers can only look.</p>
             {% else %}
             <div class="setup">
                 <h2>Google sign-in isn't set up yet</h2>
@@ -49,6 +62,8 @@
             </div>
             {% endif %}
         </div>
+
+        <p class="signin-foot">Access follows the Google Sheet's sharing settings.</p>
     </main>
 </body>
 </html>
