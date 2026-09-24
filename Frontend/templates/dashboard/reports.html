@@ -45,14 +45,14 @@
         {% if not scoped %}
             <p class="empty-line">No vouchers match these choices.</p>
         {% elif kind == "audit" %}
-            <table class="grid compact">
+            <table class="grid compact stack">
                 <thead><tr><th>DV #</th><th>DV date</th><th>Due</th><th>Payee</th><th>Particulars</th><th>Area</th><th>Status</th><th class="num">Amount</th></tr></thead>
                 <tbody>
                     {% for r in scoped %}
-                    <tr><td>{{ r.dv_no }}</td><td>{{ r.dv_date }}</td><td>{{ r.due_date }}</td><td>{{ r.payee }}</td><td class="clip">{{ r.particulars }}</td><td>{{ r.trade_area }}</td><td><span class="status status-{{ r.state }}">{{ r.state|capfirst }}</span></td><td class="num">{{ r.amount|peso }}</td></tr>
+                    <tr><th scope="row">{{ r.dv_no }}</th><td data-label="DV date">{{ r.dv_date }}</td><td data-label="Due">{{ r.due_date }}</td><td data-label="Payee">{{ r.payee }}</td><td class="clip" data-label="Particulars">{{ r.particulars }}</td><td data-label="Area">{{ r.trade_area }}</td><td data-label="Status"><span class="status status-{{ r.state }}">{{ r.state|capfirst }}</span></td><td class="num" data-label="Amount">{{ r.amount|peso }}</td></tr>
                     {% endfor %}
                 </tbody>
-                <tfoot><tr><th colspan="7" scope="row">Total · {{ scoped|length }}</th><td class="num">{{ scoped_total|peso }}</td></tr></tfoot>
+                <tfoot><tr><th colspan="7" scope="row">Total · {{ scoped|length }}</th><td class="num" data-label="Amount">{{ scoped_total|peso }}</td></tr></tfoot>
             </table>
         {% else %}
             <table class="grid compact report-table">

@@ -15,6 +15,7 @@ EDITABLE_FIELDS = [name for name in COLUMNS if name]
 STATUS_COLUMN = "L"
 
 SHEETS_API_URL = "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{range_}"
+BATCH_URL = "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate"
 SHEET_META_URL = "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}"
 
 # ponytail: in-process cache, one pull per minute per worker; move to Django's cache if we run several workers
@@ -102,18 +103,17 @@ def _pull_sheet(token):
     return rows, None
 
 
-def _write(token, method, range_, values, suffix="", extra_params=None):
-    """PUT or POST values to the sheet as the signed-in user. Returns an error message or None."""
+def _write(token, method, url, body, params=None):
+    """Send values to the sheet as the signed-in user. Returns an error message or None."""
     if not token:
         return "Sign in with Google to save changes to the sheet."
-    url = SHEETS_API_URL.format(sheet_id=settings.GOOGLE_SHEET_ID, range_=range_) + suffix
     try:
         response = requests.request(
             method,
             url,
-            params={"valueInputOption": "USER_ENTERED", **(extra_params or {})},
+            params=params,
             headers={"Authorization": f"Bearer {token}"},
-            json={"values": values},
+            json=body,
             timeout=10,
         )
         response.raise_for_status()
@@ -123,23 +123,33 @@ def _write(token, method, range_, values, suffix="", extra_params=None):
     return None
 
 
+USER_ENTERED = {"valueInputOption": "USER_ENTERED"}
+
+
+def _values_url(range_):
+    return SHEETS_API_URL.format(sheet_id=settings.GOOGLE_SHEET_ID, range_=range_)
+
+
 def _ordered(field_values):
     return [field_values.get(name, "") if name else "" for name in COLUMNS]
 
 
 def update_voucher_row(token, sheet_row, field_values):
     """Overwrite one data row in the sheet. field_values maps EDITABLE_FIELDS names to strings."""
-    return _write(token, "PUT", f"{settings.GOOGLE_SHEET_RANGE}!A{sheet_row}:L{sheet_row}", [_ordered(field_values)])
+    rng = f"{settings.GOOGLE_SHEET_RANGE}!A{sheet_row}:L{sheet_row}"
+    return _write(token, "PUT", _values_url(rng), {"values": [_ordered(field_values)]}, USER_ENTERED)
 
 
-def set_voucher_status(token, sheet_row, status):
-    """Write only the status cell, so a stale cached row can't overwrite other columns."""
-    rng = f"{settings.GOOGLE_SHEET_RANGE}!{STATUS_COLUMN}{sheet_row}"
-    return _write(token, "PUT", rng, [[status]])
+def set_statuses(token, statuses):
+    """Write only the status cells, {sheet_row: status}, in one request, so stale cached rows can't overwrite other columns."""
+    return _write(token, "POST", BATCH_URL.format(sheet_id=settings.GOOGLE_SHEET_ID), {
+        **USER_ENTERED,  # batchUpdate takes this in the body, not the query
+        "data": [{"range": f"{settings.GOOGLE_SHEET_RANGE}!{STATUS_COLUMN}{n}", "values": [[s]]} for n, s in statuses.items()],
+    })
 
 
 def append_voucher(token, field_values):
     return _write(
-        token, "POST", f"{settings.GOOGLE_SHEET_RANGE}!A:L", [_ordered(field_values)],
-        suffix=":append", extra_params={"insertDataOption": "INSERT_ROWS"},
+        token, "POST", _values_url(f"{settings.GOOGLE_SHEET_RANGE}!A:L") + ":append", {"values": [_ordered(field_values)]},
+        params={**USER_ENTERED, "insertDataOption": "INSERT_ROWS"},
     )

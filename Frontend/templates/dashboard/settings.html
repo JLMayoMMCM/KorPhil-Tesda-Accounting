@@ -36,7 +36,7 @@
                 <dt>Last sync</dt>
                 <dd>{% if pull.at %}{{ pull.at|time:"g:i A" }} · {{ pull.rows }} rows · {% if pull.error %}<span class="flag flag-bad"><i data-lucide="circle-alert"></i>{{ pull.error }}</span>{% else %}no errors{% endif %}{% else %}Never{% endif %}</dd>
                 <dd class="setting-actions">
-                    <form action="{% url 'sync' %}" method="post">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="refresh-cw"></i>Sync now</button></form>
+                    <form action="{% url 'sync' %}" method="post" data-busy="Pulling from the sheet…">{% csrf_token %}<button class="btn btn-primary" type="submit"><i data-lucide="refresh-cw"></i>Sync now</button></form>
                 </dd>
             </div>
         </dl>

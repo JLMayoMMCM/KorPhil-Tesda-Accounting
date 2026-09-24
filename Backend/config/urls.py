@@ -12,6 +12,7 @@ urlpatterns = [
     path("vouchers/new/", views.voucher_save, name="voucher_new"),
     path("vouchers/<int:sheet_row>/", views.voucher_save, name="voucher_save"),
     path("vouchers/paid/", views.mark_paid, name="mark_paid"),
+    path("vouchers/paid/undo/", views.undo_paid, name="undo_paid"),
     path("vouchers/export/", views.export, name="export"),
     path("areas/", views.areas, name="areas"),
     path("reports/", views.reports, name="reports"),

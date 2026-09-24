@@ -206,13 +206,30 @@ def mark_paid(request):
     if not targets:
         messages.error(request, "Select at least one voucher.")
         return _back(request)
-    # ponytail: one request per row; switch to values:batchUpdate if people mark dozens at once
-    for n in targets:
-        error = sheets.set_voucher_status(request.google_token, n, "PAID")
-        if error:
-            messages.error(request, error)
-            return _back(request)
-    messages.success(request, f"Marked {len(targets)} voucher{'s' if len(targets) != 1 else ''} paid.")
+    rows, _ = _load(request)
+    before = {r["sheet_row"]: r["status"] for r in rows if r["sheet_row"] in targets}
+    error = sheets.set_statuses(request.google_token, {n: "PAID" for n in targets})
+    if error:
+        messages.error(request, error)
+        return _back(request)
+    request.session["undo_paid"] = {str(n): s for n, s in before.items()}
+    messages.success(request, f"Marked {len(targets)} voucher{'s' if len(targets) != 1 else ''} paid.", extra_tags="undo")
+    return _back(request)
+
+
+@require_POST
+def undo_paid(request):
+    """Put back the statuses the last mark-paid overwrote."""
+    before = request.session.pop("undo_paid", None)
+    if not before:
+        messages.error(request, "Nothing to undo.")
+        return _back(request)
+    error = sheets.set_statuses(request.google_token, {int(n): s for n, s in before.items()})
+    if error:
+        request.session["undo_paid"] = before  # keep it so they can try again
+        messages.error(request, error)
+    else:
+        messages.success(request, f"Undid mark paid on {len(before)} voucher{'s' if len(before) != 1 else ''}.")
     return _back(request)
 
 
@@ -282,7 +299,7 @@ def areas(request):
 
     def split(field):
         cols = values(scoped, field)
-        return cols, [(area, [total(r for r in scoped if label(r, "trade_area") == area and label(r, field) == c) for c in cols])
+        return cols, [(area, [(c, total(r for r in scoped if label(r, "trade_area") == area and label(r, field) == c)) for c in cols])
                       for area in values(scoped, "trade_area")]
 
     program_cols, program_rows = split("diploma_st_assessment")

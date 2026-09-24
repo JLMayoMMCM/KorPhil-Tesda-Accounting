@@ -3,7 +3,7 @@
 
 {% block content %}
 <div class="workspace">
-    <form class="needs" action="{% url 'mark_paid' %}" method="post" data-bulk hx-boost="false">
+    <form class="needs" action="{% url 'mark_paid' %}" method="post" data-bulk hx-boost="false" data-busy="Marking paid…">
         {% csrf_token %}
         <input type="hidden" name="next" value="{{ request.get_full_path }}">
         <div class="section-head">
@@ -45,7 +45,7 @@
                         </span>
                     </td>
                     <td class="num strong">{{ r.amount|peso }}</td>
-                    <td class="col-action col-rowpaid"><button class="btn btn-sm" name="only" value="{{ r.sheet_row }}">Mark paid</button></td>
+                    <td class="col-action col-rowpaid"><button class="btn btn-sm" name="only" value="{{ r.sheet_row }}" data-confirm="Mark {{ r.dv_no }} paid ({{ r.amount|peso }})?">Mark paid</button></td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -61,7 +61,7 @@
 
         <div class="bulkbar" role="region" aria-label="Selection">
             <span><strong data-sel-count>0</strong> selected · <span data-sel-sum>₱0.00</span></span>
-            <button class="btn btn-invert push" type="submit"><span>Mark <span data-sel-count>0</span> paid</span></button>
+            <button class="btn btn-invert push" type="submit" data-confirm><span>Mark <span data-sel-count>0</span> paid</span></button>
             <button class="btn btn-ghost-invert" type="submit" formaction="{% url 'export' %}"><i data-lucide="download"></i>Export</button>
             <button class="btn btn-ghost-invert" type="button" data-clear-sel>Clear</button>
         </div>

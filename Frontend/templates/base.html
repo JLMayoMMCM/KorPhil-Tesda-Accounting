@@ -50,7 +50,7 @@
             </form>
             <a class="btn" href="{% url 'reports' %}">Run report</a>
             <a class="btn" href="{{ export_url|default:'/vouchers/export/' }}" hx-boost="false"><i data-lucide="download"></i>Export</a>
-            <form class="sync" action="{% url 'sync' %}" method="post">
+            <form class="sync" action="{% url 'sync' %}" method="post" data-busy="Pulling from the sheet…">
                 {% csrf_token %}
                 <span>{% if pull.at %}Synced {{ pull.at|time:"g:i A" }}{% endif %}</span>
                 <button class="btn" type="submit"><i data-lucide="refresh-cw"></i>Sync</button>
@@ -70,7 +70,8 @@
 
         <div class="toasts" aria-live="polite">
             {% for message in messages %}
-                <p class="toast toast-{{ message.tags }}"><i data-lucide="{% if message.tags == 'error' %}circle-alert{% else %}check{% endif %}"></i>{{ message }}</p>
+                <div class="toast toast-{{ message.level_tag }}{% if 'undo' in message.extra_tags %} toast-undo{% endif %}"><i data-lucide="{% if message.level_tag == 'error' %}circle-alert{% else %}check{% endif %}"></i>{{ message }}
+                {% if 'undo' in message.extra_tags %}<form action="{% url 'undo_paid' %}" method="post" data-busy="Undoing…">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="link link-invert" type="submit">Undo</button></form>{% endif %}</div>
             {% endfor %}
         </div>
 
@@ -81,5 +82,20 @@
         {% block content %}{% endblock %}
     </div>
 </div>
+<dialog class="modal" id="confirm" aria-labelledby="confirm-text">
+    <form method="dialog">
+        <h2 id="confirm-text" data-confirm-text></h2>
+        <p class="muted" data-confirm-note></p>
+        <footer>
+            <button class="btn" value="cancel">Cancel</button>
+            <button class="btn btn-primary" value="ok" autofocus>Mark paid</button>
+        </footer>
+    </form>
+</dialog>
+<dialog class="modal modal-busy" id="busy" aria-labelledby="busy-text">
+    <span class="spinner" aria-hidden="true"></span>
+    <p id="busy-text" data-busy-text role="status"></p>
+    <p class="muted">Keep this page open until it finishes.</p>
+</dialog>
 </body>
 </html>

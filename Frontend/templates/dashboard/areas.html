@@ -22,7 +22,7 @@
 
     {% if matrix %}
     <div class="scroll-x">
-    <table class="grid matrix">
+    <table class="grid matrix stack">
         <thead>
             <tr>
                 <th>Area</th>
@@ -36,7 +36,7 @@
             <tr>
                 <th scope="row">{{ m.area }}</th>
                 {% for c in m.cells %}
-                <td class="num">
+                <td class="num" data-label="{{ columns|slice:forloop.counter|last }}">
                     {% if c.count %}
                     <a class="cell heat-{{ c.heat }}" href="{{ c.url }}" aria-label="Open {{ c.count }} voucher{{ c.count|pluralize }}: {{ m.area }}, {{ columns|slice:forloop.counter|last }}">
                         {% if by_count %}<strong>{{ c.count }}</strong><small>{{ c.amount|peso }}</small>
@@ -45,13 +45,13 @@
                     {% else %}<span class="cell nil" aria-label="none">—</span>{% endif %}
                 </td>
                 {% endfor %}
-                <td class="num">
+                <td class="num" data-label="Unpaid total">
                     {% if not m.unpaid_count %}<span class="cell nil">—</span>{% else %}<span class="cell">
                         {% if by_count %}<strong>{{ m.unpaid_count }}</strong><small>{{ m.unpaid|peso }}</small>
                         {% else %}<strong>{{ m.unpaid|peso }}</strong><small>{{ m.unpaid_count }} DV{{ m.unpaid_count|pluralize }}</small>{% endif %}
                     </span>{% endif %}
                 </td>
-                <td class="share-col">
+                <td class="share-col" data-label="Share of unpaid">
                     <span class="share"><span class="bar"><span {% if m.unpaid_count %}class="nz"{% endif %} style="width: {{ m.share|stringformat:'s' }}%"></span></span><span class="num muted">{{ m.share_label }}%</span></span>
                 </td>
             </tr>
@@ -60,9 +60,9 @@
         <tfoot>
             <tr>
                 <th scope="row">All areas</th>
-                {% for t in totals %}<td class="num">{% if by_count %}{{ t.count }}{% else %}{{ t.amount|peso }}{% endif %}</td>{% endfor %}
-                <td class="num">{% if by_count %}{{ unpaid_all_count }}{% else %}{{ unpaid_all|peso }}{% endif %}</td>
-                <td></td>
+                {% for t in totals %}<td class="num" data-label="{{ columns|slice:forloop.counter|last }}">{% if by_count %}{{ t.count }}{% else %}{{ t.amount|peso }}{% endif %}</td>{% endfor %}
+                <td class="num" data-label="Unpaid total">{% if by_count %}{{ unpaid_all_count }}{% else %}{{ unpaid_all|peso }}{% endif %}</td>
+                <td class="empty-cell"></td>
             </tr>
         </tfoot>
     </table>
@@ -71,22 +71,22 @@
     <div class="splits">
         <section>
             <h2>Program split</h2>
-            <div class="scroll-x"><table class="grid compact">
+            <div class="scroll-x"><table class="grid compact stack">
                 <thead><tr><th>Area</th>{% for c in program_cols %}<th class="num">{{ c }}</th>{% endfor %}</tr></thead>
                 <tbody>
                     {% for area, amounts in program_rows %}
-                    <tr><th scope="row">{{ area }}</th>{% for a in amounts %}<td class="num{% if not a %} muted{% endif %}">{% if a %}{{ a|peso }}{% else %}—{% endif %}</td>{% endfor %}</tr>
+                    <tr><th scope="row">{{ area }}</th>{% for c, a in amounts %}<td class="num{% if not a %} muted{% endif %}" data-label="{{ c }}">{% if a %}{{ a|peso }}{% else %}—{% endif %}</td>{% endfor %}</tr>
                     {% endfor %}
                 </tbody>
             </table></div>
         </section>
         <section>
             <h2>Category split</h2>
-            <div class="scroll-x"><table class="grid compact">
+            <div class="scroll-x"><table class="grid compact stack">
                 <thead><tr><th>Area</th>{% for c in category_cols %}<th class="num">{{ c }}</th>{% endfor %}</tr></thead>
                 <tbody>
                     {% for area, amounts in category_rows %}
-                    <tr><th scope="row">{{ area }}</th>{% for a in amounts %}<td class="num{% if not a %} muted{% endif %}">{% if a %}{{ a|peso }}{% else %}—{% endif %}</td>{% endfor %}</tr>
+                    <tr><th scope="row">{{ area }}</th>{% for c, a in amounts %}<td class="num{% if not a %} muted{% endif %}" data-label="{{ c }}">{% if a %}{{ a|peso }}{% else %}—{% endif %}</td>{% endfor %}</tr>
                     {% endfor %}
                 </tbody>
             </table></div>

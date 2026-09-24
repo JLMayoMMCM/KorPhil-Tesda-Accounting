@@ -205,9 +205,27 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .toast-success svg { color: #7fd4a4; }
 .toast-error { background: var(--overdue); animation: none; }
+.toast-undo { animation-duration: 12s; }
+.toast-undo:hover { animation-play-state: paused; }
+.toast form { margin-left: 8px; }
+.link-invert { color: #fff; text-decoration: underline; text-underline-offset: 3px; }
 @keyframes toast { 0% { opacity: 0; transform: translateY(-6px); } 6%, 85% { opacity: 1; transform: none; } 100% { opacity: 0; visibility: hidden; } }
 .banner { display: flex; align-items: center; gap: 8px; margin: 16px 24px 0; padding: 10px 14px; border-radius: var(--radius); background: var(--overdue-bg); color: var(--overdue); font-weight: 500; }
 .banner-inline { margin: 0 24px 12px; }
+
+/* Confirm + busy dialogs: showModal() makes the rest of the page inert until they close. */
+.modal { width: min(400px, calc(100vw - 32px)); padding: 22px 24px; border: 0; border-radius: 10px; background: var(--bg); color: var(--ink); box-shadow: 0 20px 50px rgb(22 24 48 / .3); }
+.modal:focus { outline: none; }
+.modal::backdrop { background: rgb(22 24 48 / .45); }
+.modal[open] { animation: rise .15s ease-out; }
+.modal h2 { overflow-wrap: anywhere; }
+.modal .muted { margin-top: 6px; font-size: 13px; }
+.modal footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.modal-busy { width: min(320px, calc(100vw - 32px)); text-align: center; }
+.modal-busy[open] { display: grid; justify-items: center; gap: 2px; }
+.modal-busy [data-busy-text] { margin-top: 12px; font-weight: 600; }
+.spinner { width: 28px; height: 28px; border: 3px solid var(--brand-tint); border-top-color: var(--brand); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* ---- tables ---------------------------------------------------------------------------- */
 .grid { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -437,8 +455,8 @@ a.cell:hover strong { color: var(--brand); }
     .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
     .sidebar { position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; padding: 8px 12px; border-right: 0; border-bottom: 1px solid var(--line); }
     .brand { padding: 4px 0; }
-    .nav { flex-direction: row; overflow-x: auto; width: 100%; }
-    .nav a { flex: none; }
+    .nav { flex-direction: row; flex-wrap: wrap; width: 100%; }
+    .nav a { flex: none; height: 32px; padding: 0 8px; gap: 6px; }
     .subnav, .sheet-foot { display: none; }
     .topbar { position: static; height: auto; flex-wrap: wrap; padding: 10px 16px; }
     .topbar h1 { min-width: 0; font-size: 18px; }
@@ -453,10 +471,41 @@ a.cell:hover strong { color: var(--brand); }
     .needs-table .col-payee, .needs-table .col-rowpaid, .needs-table th:nth-child(3), .needs-table th:nth-child(7) { display: none; }
     .needs-table td.strong { height: 50px; line-height: 1.25; }
     .sub { display: block; font-size: 12px; font-weight: 400; color: var(--ink-2); }
-    .matrix tr > :first-child, .splits tr > :first-child { position: sticky; left: 0; z-index: 1; background: var(--bg); box-shadow: inset -1px 0 0 var(--line-2); }
-    .register-table .col-payee { min-width: 9ch; }
-    .matrix thead th:first-child, .splits thead th:first-child { background: var(--tint); }
-    .nav { mask-image: linear-gradient(to right, #000 85%, transparent); }
+    /* Wrap instead of scrolling sideways. */
+    .grid th, .grid td { white-space: normal; overflow-wrap: break-word; }
+    .clip { max-width: none; white-space: normal; }
+    .register-list { overflow-x: visible; }
+    /* Register rows become two lines: DV # + amount, then payee, due and status. */
+    .register-table, .register-table thead, .register-table tbody, .register-table tfoot { display: block; }
+    .register-table .wide:not(.col-check), .register-table td:empty { display: none; }
+    .register-table tr { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto auto; grid-template-areas: "check dv dv amount" "check payee due status"; align-items: center; gap: 2px 12px; padding: 10px 4px; border-bottom: 1px solid var(--line); }
+    .register-table thead tr, .register-table tfoot tr { display: flex; padding: 0 4px; border: 0; }
+    .register-table th, .register-table td { height: auto; min-height: 0; padding: 0 !important; border: 0; }
+    .register-table thead tr { background: var(--tint); border-radius: var(--radius); height: 32px; align-items: center; }
+    .register-table thead th:not(.col-check):not(:nth-child(2)) { display: none; }
+    .register-table tfoot tr { justify-content: space-between; min-height: 44px; border-top: 2px solid var(--ink); }
+    .register-table .col-check { grid-area: check; align-self: start; }
+    .register-table td.strong { grid-area: dv; }
+    .register-table td.num { grid-area: amount; }
+    .register-table .col-payee { grid-area: payee; width: auto; color: var(--ink-2); }
+    .register-table td:nth-child(4) { grid-area: due; white-space: nowrap; }
+    .register-table td:has(> .status) { grid-area: status; }
+    .bulkbar { flex-wrap: wrap; padding: 8px 8px 8px 12px; }
+    .bulkbar > span:first-child { flex-basis: 100%; }
+    .register-list:has(input[name=sel]:checked) { padding-bottom: 112px; }
+    /* .stack tables become one card per row, each cell labelled from data-label. */
+    .stack, .stack tbody, .stack tfoot { display: block; }
+    .stack thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    .stack tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+    .stack tfoot tr { border-top: 2px solid var(--ink); border-bottom: 0; }
+    .grid.stack th, .grid.stack td { display: grid; align-content: start; justify-items: start; height: auto; padding: 0; border: 0; text-align: left; }
+    .grid.stack tr > th:first-child { grid-column: 1 / -1; font-size: 14px; }
+    .stack [data-label]::before { content: attr(data-label); color: var(--ink-2); font-size: 12px; font-weight: 500; }
+    .stack .empty-cell, .stack td:empty { display: none; }
+    .stack .share-col { grid-column: 1 / -1; width: auto; }
+    .stack .share { width: 100%; max-width: 260px; }
+    .stack .cell { justify-items: start; height: auto; padding: 2px 6px; margin-left: -6px; }
+    .sheet-preview .grid.stack th:first-child { padding-left: 0; }
     .toolbar .push { flex-basis: 100%; margin-left: 0; }
     .needs-table th:nth-child(4), .needs-table td:nth-child(4) { display: none; }
     .fields { grid-template-columns: minmax(0, 1fr); padding: 16px; }

@@ -38,7 +38,7 @@
         {% endif %}
 
         {% if shown %}
-        <form action="{% url 'mark_paid' %}" method="post" data-bulk hx-boost="false">
+        <form action="{% url 'mark_paid' %}" method="post" data-bulk hx-boost="false" data-busy="Marking paid…">
             {% csrf_token %}
             <input type="hidden" name="next" value="{{ request.get_full_path }}">
             <table class="grid register-table">
@@ -73,7 +73,7 @@
                         <td class="num strong">{{ r.amount|peso }}</td>
                         <td><span class="status status-{{ r.state }}">{{ r.state|capfirst }}</span></td>
                         <td class="wide col-action">
-                            {% if r.state != "paid" %}<button class="btn btn-sm" name="only" value="{{ r.sheet_row }}">Mark paid</button>{% endif %}
+                            {% if r.state != "paid" %}<button class="btn btn-sm" name="only" value="{{ r.sheet_row }}" data-confirm="Mark {{ r.dv_no }} paid ({{ r.amount|peso }})?">Mark paid</button>{% endif %}
                         </td>
                     </tr>
                     {% endfor %}
@@ -90,7 +90,7 @@
             </table>
             <div class="bulkbar" role="region" aria-label="Selection">
                 <span><strong data-sel-count>0</strong> selected · <span data-sel-sum>₱0.00</span></span>
-                <button class="btn btn-invert push" type="submit"><span>Mark <span data-sel-count>0</span> paid</span></button>
+                <button class="btn btn-invert push" type="submit" data-confirm><span>Mark <span data-sel-count>0</span> paid</span></button>
                 <button class="btn btn-ghost-invert" type="submit" formaction="{% url 'export' %}"><i data-lucide="download"></i>Export</button>
                 <button class="btn btn-ghost-invert" type="button" data-clear-sel>Clear</button>
             </div>
@@ -108,7 +108,7 @@
     {% if panel %}
     <form class="panel" method="post" hx-boost="true"
           action="{% if is_new %}{% url 'voucher_new' %}{% else %}{% url 'voucher_save' panel_row.sheet_row %}{% endif %}"
-          data-dirty-form{% if panel_row %} data-row="{{ panel_row.sheet_row }}"{% endif %}>
+          data-dirty-form data-busy="Saving to the sheet…"{% if panel_row %} data-row="{{ panel_row.sheet_row }}"{% endif %}>
         {% csrf_token %}
         <input type="hidden" name="next" value="{% if is_new %}{{ close_url }}{% else %}{{ request.POST.next|default:request.get_full_path }}{% endif %}">
         <header class="panel-head">
@@ -123,7 +123,7 @@
                 {% endif %}
             </div>
             {% if panel_row and panel_row.state != "paid" %}
-            <button class="btn btn-primary" type="submit" form="panel-paid" data-key="p">Mark paid<kbd>P</kbd></button>
+            <button class="btn btn-primary" type="submit" form="panel-paid" data-key="p" data-confirm="Mark {{ panel_row.dv_no|default:'this DV' }} paid ({{ panel_row.amount|peso }})?">Mark paid<kbd>P</kbd></button>
             {% endif %}
             <a class="icon-btn" href="{{ close_url }}" aria-label="Close panel" data-key="Escape"><i data-lucide="x"></i></a>
         </header>
@@ -164,7 +164,7 @@
         </footer>
     </form>
     {% if panel_row and panel_row.state != "paid" %}
-    <form id="panel-paid" action="{% url 'mark_paid' %}" method="post" hidden>
+    <form id="panel-paid" action="{% url 'mark_paid' %}" method="post" hidden data-busy="Marking paid…">
         {% csrf_token %}
         <input type="hidden" name="only" value="{{ panel_row.sheet_row }}">
         <input type="hidden" name="next" value="{{ request.get_full_path }}">
