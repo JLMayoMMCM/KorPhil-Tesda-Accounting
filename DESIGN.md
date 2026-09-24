@@ -199,7 +199,7 @@ A fixed app shell: a 200px sticky sidebar, then a 56px sticky action bar carryin
 
 Spacing runs on 4px steps: 8px between controls, 12px table cell padding, 16px section gaps, 24px page padding, 32px between rail sections. Rows are 38px (30px compact, 56px matrix); header bands are 32px.
 
-Responsive: at 1280px the rails narrow (380px / 460px) and secondary action-bar buttons hide. At 1024px every split stacks to one column and the side panel replaces the list. At 760px the sidebar becomes a horizontally scrolling top nav with a fade mask, search takes a full row, low-priority table columns hide, and the first column of wide matrices sticks left.
+Responsive: at 1280px the rails narrow (380px / 460px) and secondary action-bar buttons hide. At 1024px every split stacks to one column and the side panel replaces the list. At 760px the sidebar nav wraps onto rows of 32px items, search takes a full row, and nothing scrolls sideways: table cells wrap, register rows become two-line grids (DV # and amount, then payee, due and status), and `.stack` tables turn into one block per row with each cell labelled from `data-label`.
 
 ## Elevation & Depth
 
@@ -209,10 +209,11 @@ Flat by default. Depth is tonal: the sidebar sits one step darker than the canva
 - **Toast** (`box-shadow: 0 6px 20px rgb(22 24 48 / .18)`): transient messages, top right.
 - **Popover** (`box-shadow: 0 10px 30px rgb(22 24 48 / .14)`): the filter menu.
 - **Bulk bar** (`box-shadow: 0 10px 30px rgb(22 24 48 / .25)`): the sticky navy selection bar.
+- **Modal** (`box-shadow: 0 20px 50px rgb(22 24 48 / .3)`): confirm and busy dialogs, over a 45% ink backdrop.
 - **Focus halo** (`box-shadow: 0 0 0 3px` Navy Wash): inputs and search on focus.
 
 ### Named Rules
-**The Float-Only Shadow Rule.** If it scrolls with the page, it has no shadow. Only toasts, popovers and the bulk bar lift.
+**The Float-Only Shadow Rule.** If it scrolls with the page, it has no shadow. Only toasts, popovers, the bulk bar and modals lift.
 
 ## Shapes
 
@@ -247,7 +248,7 @@ There are no cards. The only boxed surface is the report preview sheet: Ledger T
 - **Sidebar:** 34px items, 500 weight, 16px Mist icons, trailing counts in 12px Mist (overdue count in bold red). Hover Hover Grey; current item Navy Wash with navy 700 text and navy icon. Voucher sub-items are 28px, 13px, indented 36px. A sheet footer (sync time, Open in Google Sheets link) sits at the bottom above a hairline.
 - **Tabs:** 44px strip, Slate 500 text with counts; current tab Ledger Ink 700 with a 2px navy underline.
 - **Segmented control:** 2px-padded outlined track; active option is a solid navy 4px-radius pill with white text.
-- **Mobile:** sidebar collapses to a scrolling row of nav items; sub-nav and sheet footer hide.
+- **Mobile:** sidebar collapses to wrapping rows of nav items; sub-nav and sheet footer hide.
 
 ### Data Grid
 The core component. Full-width, 13px, 38px rows with 1px hairline rules, a 32px Ledger Tint header band (6px rounded ends, 12px 600 Slate text), money right-aligned and never wrapped. Totals sit in `tfoot` at 44px, 700 weight, under a 2px Ledger Ink rule. Row hover is Ledger Tint; checked or open rows are Navy Wash. Grouped tables (Needs action) insert 32px Ledger Tint group rows with a bold label and count · sum, and can collapse a Later group behind Show N.
@@ -265,7 +266,12 @@ Trade Areas cells: right-aligned amount (14px 600) over a count (12px Slate) in 
 6px Hover Grey track, Seal Navy fill, 3px ends, minimum 3px fill for non-zero values; label, bar and amount in a three-column grid.
 
 ### Toasts and Banners
-Toasts: Ledger Ink fill, white 13px 500 text, 6px radius, toast shadow, auto-dismiss after 4s; success icon mint, error toasts turn Overdue Red and persist. Banners: Overdue Blush with red text and an alert icon.
+Toasts: Ledger Ink fill, white 13px 500 text, 6px radius, toast shadow, auto-dismiss after 4s; success icon mint, error toasts turn Overdue Red and persist. The mark-paid toast carries an underlined white Undo link and stays 12s, pausing on hover. Banners: Overdue Blush with red text and an alert icon.
+
+### Modals
+Native `<dialog>` opened with `showModal()`, so the page behind is inert. White, 10px radius, modal shadow, max 400px wide, rises 0.15s on open.
+- **Confirm:** heading question, Slate 13px note, right-aligned Cancel and primary action. Used before Mark paid and before discarding unsaved edits.
+- **Busy:** 320px, centered 28px navy spinner on a Navy Wash ring, 600 status text, "Keep this page open" note. Shown while a save, sync or undo writes to the sheet; Escape cannot close it.
 
 ### Settings Rows
 A definition list of 260px label column (600, with a 12.5px Slate note), value column, and right-aligned action; hairline between rows. Connection and access flags are a 16px lucide icon plus 13px Slate text, red when bad.

@@ -1,4 +1,7 @@
 # TESDA Accounting Disbursement Dashboard
+
+Version 1.2.0
+
 A dashboard for managing and tracking accounting disbursements.
 
 ## Stack
@@ -29,7 +32,14 @@ Everyone signs in with their own Google account, and that account reads and writ
 
 Open the app at `http://localhost:8000` (not `127.0.0.1`; the redirect URI must match exactly).
 
-`GOOGLE_SHEET_API_KEY` is now optional. It's only used by the Django admin's sheet page for staff who haven't signed in with Google.
+`GOOGLE_SHEET_API_KEY` is optional. It's only a read fallback for requests with no signed-in Google token (e.g. scripts); saves always need a signed-in account.
+
+## Saving to the sheet
+
+- **Mark paid** (row action or bulk bar) asks for confirmation first, then writes `PAID` to the Status column (L) only, for all selected rows in one `values:batchUpdate` request.
+- The success toast has an **Undo** button (~12s, pauses on hover) that puts back the previous statuses. Only the last mark-paid can be undone.
+- While a save, sync or undo runs, a modal blocks the page; afterwards the page returns to the same scroll position.
+- Leaving a voucher form with unsaved edits (link, another form, or closing the tab) asks before discarding them.
 
 ## Structure
 
