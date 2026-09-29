@@ -1,13 +1,13 @@
 "use client"
 
-import { ExternalLinkIcon, FileTextIcon, LayoutDashboardIcon, MapIcon, ReceiptIcon, SettingsIcon } from "lucide-react"
+import { ExternalLinkIcon, FileSpreadsheetIcon, FileTextIcon, HomeIcon, LayoutDashboardIcon, MapIcon, ReceiptIcon, SettingsIcon } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuBadge,
-  SidebarMenuButton, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem,
+  SidebarMenuButton, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem, SidebarRail,
 } from "@/components/ui/sidebar"
 import type { Tab } from "@/lib/ledger"
 
@@ -19,15 +19,15 @@ export function AppSidebar({ counts, sheetTitle, synced, sheetUrl }: Props) {
   const onVouchers = path.startsWith("/vouchers")
 
   return (
-    <Sidebar>
+    <Sidebar collapsible="icon">
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" render={<Link href="/" />}>
+            <SidebarMenuButton size="lg" tooltip="KorPhil-TESDA" render={<Link href="/" />}>
               <Image src="/logo.webp" alt="" width={32} height={32} />
               <span className="flex flex-col leading-tight">
                 <strong className="font-semibold">KorPhil-TESDA</strong>
-                <small className="text-muted-foreground">Disbursements</small>
+                <small className="text-sidebar-foreground/70">Disbursements</small>
               </span>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -38,12 +38,17 @@ export function AppSidebar({ counts, sheetTitle, synced, sheetUrl }: Props) {
         <SidebarGroup>
           <SidebarMenu aria-label="Main">
             <SidebarMenuItem>
-              <SidebarMenuButton isActive={path === "/"} render={<Link href="/" />}>
+              <SidebarMenuButton isActive={path.startsWith("/dashboard")} tooltip="Dashboard" render={<Link href="/dashboard/" />}>
+                <HomeIcon />Dashboard
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton isActive={path === "/"} tooltip="Workspace" render={<Link href="/" />}>
                 <LayoutDashboardIcon />Workspace
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton isActive={onVouchers && tab === "all"} render={<Link href="/vouchers/" />}>
+              <SidebarMenuButton isActive={onVouchers && tab === "all"} tooltip="Vouchers" render={<Link href="/vouchers/" />}>
                 <ReceiptIcon />Vouchers
               </SidebarMenuButton>
               <SidebarMenuBadge>{counts.all}</SidebarMenuBadge>
@@ -52,7 +57,7 @@ export function AppSidebar({ counts, sheetTitle, synced, sheetUrl }: Props) {
                   <SidebarMenuSubItem key={key}>
                     <SidebarMenuSubButton isActive={onVouchers && tab === key} render={<Link href={`/vouchers/?tab=${key}`} />}>
                       <span>{name}</span>
-                      <span className={key === "overdue" && counts.overdue ? "ml-auto font-semibold text-destructive tabular-nums" : "ml-auto text-muted-foreground tabular-nums"}>
+                      <span className={key === "overdue" && counts.overdue ? "ml-auto font-semibold text-red-300 tabular-nums" : "ml-auto text-sidebar-foreground/70 tabular-nums"}>
                         {counts[key]}
                       </span>
                     </SidebarMenuSubButton>
@@ -61,17 +66,17 @@ export function AppSidebar({ counts, sheetTitle, synced, sheetUrl }: Props) {
               </SidebarMenuSub>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton isActive={path.startsWith("/areas")} render={<Link href="/areas/" />}>
+              <SidebarMenuButton isActive={path.startsWith("/areas")} tooltip="Trade Areas" render={<Link href="/areas/" />}>
                 <MapIcon />Trade Areas
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton isActive={path.startsWith("/reports")} render={<Link href="/reports/" />}>
+              <SidebarMenuButton isActive={path.startsWith("/reports")} tooltip="Reports" render={<Link href="/reports/" />}>
                 <FileTextIcon />Reports
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton isActive={path.startsWith("/settings")} render={<Link href="/settings/" />}>
+              <SidebarMenuButton isActive={path.startsWith("/settings")} tooltip="Settings" render={<Link href="/settings/" />}>
                 <SettingsIcon />Settings
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -79,15 +84,22 @@ export function AppSidebar({ counts, sheetTitle, synced, sheetUrl }: Props) {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="gap-1 p-4 text-xs">
-        <strong className="truncate text-sm font-medium">{sheetTitle || "Google Sheet"}</strong>
-        <span className="text-muted-foreground">{synced}</span>
-        {sheetUrl && (
-          <a className="inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline" href={sheetUrl} target="_blank" rel="noopener">
-            Open in Google Sheets<ExternalLinkIcon className="size-3" />
-          </a>
-        )}
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" tooltip={`Open ${sheetTitle || "Google Sheet"}`}
+              render={sheetUrl ? <a href={sheetUrl} target="_blank" rel="noopener" /> : <div />}>
+              <FileSpreadsheetIcon />
+              <span className="flex min-w-0 flex-col text-xs leading-tight">
+                <strong className="truncate text-sm font-medium">{sheetTitle || "Google Sheet"}</strong>
+                <span className="truncate text-sidebar-foreground/70">{synced}</span>
+              </span>
+              {sheetUrl && <ExternalLinkIcon className="ml-auto opacity-70" />}
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarFooter>
+      <SidebarRail />
     </Sidebar>
   )
 }

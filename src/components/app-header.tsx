@@ -19,7 +19,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 import { qs } from "@/lib/ledger"
 import type { GoogleUser } from "@/lib/session"
 
-const TITLES: [string, string][] = [["/vouchers", "Vouchers"], ["/areas", "Trade Areas"], ["/reports", "Reports"], ["/settings", "Settings"]]
+const TITLES: [string, string][] = [["/dashboard", "Dashboard"], ["/vouchers", "Vouchers"], ["/areas", "Trade Areas"], ["/reports", "Reports"], ["/settings", "Settings"]]
 
 export function AppHeader({ user, synced }: { user: GoogleUser; synced: string }) {
   const path = usePathname()

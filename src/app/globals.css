@@ -72,15 +72,18 @@
   --chart-3: oklch(0.546 0.245 262.881);
   --chart-4: oklch(0.488 0.243 264.376);
   --chart-5: oklch(0.424 0.199 265.638);
+  --chart-overdue: #b42318;
+  --chart-pending: #b86e00;
+  --chart-paid: #1b7a45;
   --radius: 0.625rem;
-  --sidebar: oklch(0.986 0.002 67.8);
-  --sidebar-foreground: oklch(0.147 0.004 49.3);
-  --sidebar-primary: oklch(0.511 0.262 276.966);
-  --sidebar-primary-foreground: oklch(0.962 0.018 272.314);
-  --sidebar-accent: oklch(0.96 0.002 17.2);
-  --sidebar-accent-foreground: oklch(0.214 0.009 43.1);
-  --sidebar-border: oklch(0.922 0.005 34.3);
-  --sidebar-ring: oklch(0.714 0.014 41.2);
+  --sidebar: #232a7c;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #ffffff;
+  --sidebar-primary-foreground: #232a7c;
+  --sidebar-accent: oklch(1 0 0 / 10%);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: oklch(1 0 0 / 14%);
+  --sidebar-ring: oklch(1 0 0 / 50%);
 }
 
 .dark {
@@ -107,14 +110,17 @@
   --chart-3: oklch(0.546 0.245 262.881);
   --chart-4: oklch(0.488 0.243 264.376);
   --chart-5: oklch(0.424 0.199 265.638);
-  --sidebar: oklch(0.214 0.009 43.1);
-  --sidebar-foreground: oklch(0.986 0.002 67.8);
-  --sidebar-primary: oklch(0.585 0.233 277.117);
-  --sidebar-primary-foreground: oklch(0.962 0.018 272.314);
-  --sidebar-accent: oklch(0.268 0.011 36.5);
-  --sidebar-accent-foreground: oklch(0.986 0.002 67.8);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.547 0.021 43.1);
+  --chart-overdue: #e66767;
+  --chart-pending: #c98500;
+  --chart-paid: #2f9e5f;
+  --sidebar: #181e62;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #ffffff;
+  --sidebar-primary-foreground: #232a7c;
+  --sidebar-accent: oklch(1 0 0 / 10%);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: oklch(1 0 0 / 14%);
+  --sidebar-ring: oklch(1 0 0 / 50%);
 }
 
 @layer base {
@@ -127,6 +133,18 @@
   html {
     @apply font-sans;
   }
+}
+
+/* Navy sidebar: idle icons recede, the current item is a brighter white wash than hover. */
+[data-slot="sidebar"] :is([data-slot="sidebar-menu-button"], [data-slot="sidebar-menu-sub-button"]) > svg {
+  opacity: 0.75;
+}
+[data-slot="sidebar"] :is([data-slot="sidebar-menu-button"], [data-slot="sidebar-menu-sub-button"])[data-active] {
+  background: oklch(1 0 0 / 20%);
+  font-weight: 600;
+}
+[data-slot="sidebar"] [data-active] > svg {
+  opacity: 1;
 }
 
 /* Reports print as just the report. */

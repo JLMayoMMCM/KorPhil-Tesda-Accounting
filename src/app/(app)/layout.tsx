@@ -1,4 +1,5 @@
 import { CircleAlertIcon } from "lucide-react"
+import { cookies } from "next/headers"
 
 import { AppHeader } from "@/components/app-header"
 import { AppSidebar } from "@/components/app-sidebar"
@@ -11,9 +12,11 @@ import { sheetUrl } from "@/lib/sheets"
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const { counts, pull, error, user } = await getData()
   const synced = clock(pull.at)
+  // The sidebar writes this cookie on toggle; reading it keeps the rail collapsed across reloads.
+  const sidebarOpen = (await cookies()).get("sidebar_state")?.value !== "false"
   return (
     <AppUI>
-      <SidebarProvider>
+      <SidebarProvider defaultOpen={sidebarOpen}>
         <AppSidebar
           counts={counts}
           sheetTitle={pull.title}

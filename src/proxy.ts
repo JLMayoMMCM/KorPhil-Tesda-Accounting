@@ -11,7 +11,8 @@ export async function proxy(request: NextRequest) {
   const cookie = request.cookies.get(SESSION_COOKIE)?.value
   const session = await unseal<Session>(cookie)
   const next = request.nextUrl.pathname + request.nextUrl.search
-  const login = new URL(`/login/?next=${encodeURIComponent(next)}`, request.url)
+  // The bare site root isn't a page to return to; sign-in lands on the dashboard instead.
+  const login = new URL(next === "/" ? "/login/" : `/login/?next=${encodeURIComponent(next)}`, request.url)
 
   if (!session) return NextResponse.redirect(login)
 
