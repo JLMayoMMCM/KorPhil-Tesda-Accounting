@@ -1,7 +1,7 @@
 // Plain SVG/CSS charts for reports: server-rendered, print-safe, no chart library.
 // Every chart sits above the report's table, which is its accessible data view.
 import { Bar } from "@/components/bar"
-import { peso, type State } from "@/lib/ledger"
+import { peso, total, type State, type Voucher } from "@/lib/ledger"
 
 export type Item = { label: string; value: number; color?: string; mark?: State }
 
@@ -95,6 +95,24 @@ export function Columns({ items, caption }: { items: Item[]; caption: string }) 
         {items.map((i) => <span key={i.label} className="min-w-0 flex-1 truncate text-center">{i.label}</span>)}
       </div>
     </figure>
+  )
+}
+
+/** Total · Paid · Outstanding · Overdue as a ledger strip, not cards: hairline columns, figures right where the eye lands. */
+export function Totals({ rows }: { rows: Voucher[] }) {
+  const paid = rows.filter((r) => r.state === "paid"), overdue = rows.filter((r) => r.state === "overdue")
+  const cells = [["Total", total(rows), rows.length, null], ["Paid", total(paid), paid.length, "paid"],
+    ["Outstanding", total(rows) - total(paid), rows.length - paid.length, null], ["Overdue", total(overdue), overdue.length, "overdue"]] as const
+  return (
+    <dl aria-label="Totals" className="grid grid-cols-2 border-y break-inside-avoid sm:grid-cols-4 sm:divide-x">
+      {cells.map(([k, v, n, mark]) => (
+        <div key={k} className="flex flex-col gap-0.5 px-4 py-3 first:pl-0 sm:first:pl-4">
+          <dt className="flex items-center gap-2 text-xs text-muted-foreground">{mark && <StatusMark state={mark} />}{k}</dt>
+          <dd className={`text-lg font-bold tabular-nums ${k === "Overdue" && v ? "text-destructive" : ""}`}>{peso(v)}</dd>
+          <dd className="text-xs text-muted-foreground tabular-nums">{n} voucher{n === 1 ? "" : "s"}</dd>
+        </div>
+      ))}
+    </dl>
   )
 }
 

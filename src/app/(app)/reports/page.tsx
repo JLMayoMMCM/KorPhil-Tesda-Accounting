@@ -5,7 +5,7 @@ import Image from "next/image"
 import Link from "next/link"
 
 import { AutoSubmitSelect } from "@/components/auto-submit"
-import { BarList, Columns, Donut, StatusMark } from "@/components/charts"
+import { BarList, Columns, Donut, Totals } from "@/components/charts"
 import { PrintButton } from "@/components/print-button"
 import { StatusBadge } from "@/components/status-badge"
 import { Button } from "@/components/ui/button"
@@ -36,8 +36,6 @@ export default async function Reports({ searchParams }: PageProps<"/reports">) {
   const { kind, month, area, state, scoped, lines } = buildReport(rows, params)
   const byArea = group(scoped, (r) => label(r, "trade_area"))
   const totalAmt = total(scoped)
-  const paid = scoped.filter((r) => r.state === "paid"), overdue = scoped.filter((r) => r.state === "overdue")
-  const paidAmt = total(paid), overdueAmt = total(overdue), paidN = paid.length, overdueN = overdue.length
   const generated = new Date().toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Manila" })
 
   const word = (name: string, labelText: string, value: string, options: [string, string][]) => (
@@ -106,17 +104,7 @@ export default async function Reports({ searchParams }: PageProps<"/reports">) {
               <p className="py-8 text-center text-muted-foreground">No vouchers match these choices. Widen the month, trade area, or status above.</p>
             ) : (
               <>
-                {/* Totals as a ledger strip, not cards: hairline columns, figures right where the eye lands. */}
-                <dl aria-label="Totals" className="grid grid-cols-2 border-y break-inside-avoid sm:grid-cols-4 sm:divide-x">
-                  {([["Total", totalAmt, scoped.length, null], ["Paid", paidAmt, paidN, "paid"],
-                    ["Outstanding", totalAmt - paidAmt, scoped.length - paidN, null], ["Overdue", overdueAmt, overdueN, "overdue"]] as const).map(([k, v, n, mark]) => (
-                    <div key={k} className="flex flex-col gap-0.5 px-4 py-3 first:pl-0 sm:first:pl-4">
-                      <dt className="flex items-center gap-2 text-xs text-muted-foreground">{mark && <StatusMark state={mark} />}{k}</dt>
-                      <dd className={`text-lg font-bold tabular-nums ${k === "Overdue" && v ? "text-destructive" : ""}`}>{peso(v)}</dd>
-                      <dd className="text-xs text-muted-foreground tabular-nums">{n} voucher{n === 1 ? "" : "s"}</dd>
-                    </div>
-                  ))}
-                </dl>
+                <Totals rows={scoped} />
 
                 {kind !== "audit" && (
                   <section className="flex flex-col gap-4 break-inside-avoid">
