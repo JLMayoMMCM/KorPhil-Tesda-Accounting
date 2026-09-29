@@ -2,9 +2,9 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "django",
-      "runtimeExecutable": "venv/Scripts/python.exe",
-      "runtimeArgs": ["run.py", "127.0.0.1:8000"],
+      "name": "next",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
       "port": 8000
     }
   ]
