@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator"
 import { clock, getData } from "@/lib/data"
 import { fullName } from "@/lib/session"
-import { CACHE_SECONDS, SHEET_ID, SHEET_RANGE, sheetUrl } from "@/lib/sheets"
+import { CACHE_SECONDS, FIRST_ROW, SHEET_ID, SHEET_RANGE, sheetUrl } from "@/lib/sheets"
 
 export const metadata: Metadata = { title: "Settings" }
 
@@ -28,8 +28,8 @@ export default async function Settings() {
     </>, open("Open sheet")],
     ["Sheet ID and range", "", <>
       <code className="break-all">{SHEET_ID || "Not set"}</code>
-      <code>{SHEET_RANGE}</code>
-      <span className="text-muted-foreground">First 2 rows skipped (header + spacer)</span>
+      <code>{SHEET_RANGE}!A:J</code>
+      <span className="text-muted-foreground">Vouchers start on row {FIRST_ROW} (rows above hold the header and totals)</span>
     </>],
     ["Signed in as", "Reads and saves use this Google account.", <>
       <strong className="font-medium">{fullName(user)}</strong>

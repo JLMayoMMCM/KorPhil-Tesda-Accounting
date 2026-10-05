@@ -2,7 +2,7 @@
 
 Version 2.0.0
 
-A dashboard for managing and tracking accounting disbursements. A Google Sheet is the source of truth; the app reads it, surfaces what needs paying, and writes edits back.
+A dashboard for managing and tracking accounting disbursements. A Google Sheet's **EXP** tab is the source of truth; the app reads it, flags vouchers that need review, and writes edits back.
 
 ## Stack
 - **Data:** Google Sheets (no database)
@@ -24,7 +24,7 @@ Create `.env.local` in the repo root:
 | Variable | |
 |---|---|
 | `GOOGLE_SHEET_ID` | required |
-| `GOOGLE_SHEET_RANGE` | sheet/tab name, default `Sheet1` |
+| `GOOGLE_SHEET_RANGE` | tab name, default `EXP` (the app reads columns A:J from row 5) |
 | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | OAuth "Web application" client |
 | `SESSION_SECRET` | 32 random bytes, base64url: `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"` |
 | `GOOGLE_SHEET_API_KEY` | optional read-only fallback |
@@ -40,16 +40,17 @@ Everyone signs in with their own Google account, and that account reads and writ
 
 ## Saving to the sheet
 
-- **Mark paid** (row, panel or bulk bar) asks first, then writes `PAID` to the Status column (L) only, in one `values:batchUpdate`. The toast's **Undo** (~12 s, pauses on hover) puts the previous statuses back.
-- A blocking dialog shows while a save, sync or undo runs.
+- The edit panel writes one row, columns A:J (B, the unlabelled spacer, is written blank). **New DV** appends a row after the last voucher.
+- The dropdown lists in columns M:O are never touched.
+- A blocking dialog shows while a save or sync runs.
 - Leaving a voucher form with unsaved edits (link or closing the tab) asks before discarding them.
 
 ## Structure
 
-- `src/lib/ledger.ts`: pure rules: status buckets, days late, totals, filters, money (integer centavos). Self-check: `npm test`.
+- `src/lib/ledger.ts`: pure rules: review checks (no/duplicate DV #, no date, no amount, no check #, no trade area), totals, filters, money (integer centavos). Self-check: `npm test`.
 - `src/lib/sheets.ts`: Google Sheets read/write (pulls cached 60 s per server instance).
 - `src/lib/session.ts`, `src/proxy.ts`, `src/app/login/`, `src/app/auth/callback/`: Google sign-in; the session is an encrypted cookie, refreshed in the proxy.
-- `src/app/actions.ts`: Server Actions (save, mark paid, undo, sync, sign out).
+- `src/app/actions.ts`: Server Actions (save, sync, sign out).
 - `src/app/(app)/`: Workspace, Vouchers, Trade Areas, Reports, Settings, and the CSV routes.
 - `src/components/`: app shell and shared client behavior; `src/components/ui/` is shadcn.
 - `Archive/` (git-ignored, local only): the previous Django + HTMX app. See [MIGRATION.md](MIGRATION.md).

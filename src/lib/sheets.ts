@@ -1,18 +1,20 @@
 import "server-only"
 
-import type { Field, RawVoucher } from "@/lib/ledger"
+import { serialDate, type Field, type RawVoucher } from "@/lib/ledger"
 
-// Column layout of the source sheet (see Archive/Assets/SAMPLE SHEET - TESTING.csv).
-// Columns G/H are spacer columns in the sheet and are dropped.
+// Column layout of the EXP tab, A:K. Column B is an unlabelled spacer and is dropped.
+// Column K is the review status ("Verified" / "For Review").
+// Rows 1-4 are the header, a label row, the totals row and a blank row; data starts on row 5.
+// Columns M:O hold the dropdown lists for H:J and are never read or written.
 const COLUMNS: (Field | null)[] = [
-  "dv_date", "due_date", "dv_no", "payee", "particulars", "gross_amount",
-  null, null,
-  "trade_area", "diploma_st_assessment", "category", "status",
+  "dv_date", null, "dv_no", "payee", "particulars", "gross_amount",
+  "check_number", "trade_area", "diploma_st_assessment", "category", "status",
 ]
-const STATUS_COLUMN = "L"
+export const FIRST_ROW = 5
+const LAST_COLUMN = "K"
 
 export const SHEET_ID = process.env.GOOGLE_SHEET_ID ?? ""
-export const SHEET_RANGE = process.env.GOOGLE_SHEET_RANGE || "Sheet1"
+export const SHEET_RANGE = process.env.GOOGLE_SHEET_RANGE || "EXP"
 const API_KEY = process.env.GOOGLE_SHEET_API_KEY ?? ""
 const API = "https://sheets.googleapis.com/v4/spreadsheets"
 
@@ -84,19 +86,23 @@ export const lastPull = () => ({ title: pull.title, at: pull.at, rows: pull.rows
 
 async function pullSheet(token: string | null): Promise<[RawVoucher[], string | null]> {
   if (!SHEET_ID || !(token || API_KEY)) return [[], "Google Sheet is not configured. Set GOOGLE_SHEET_ID in .env.local."]
-  let values: string[][]
+  let values: (string | number | boolean)[][]
   try {
-    values = (await call(`${API}/${SHEET_ID}/values/${encodeURIComponent(SHEET_RANGE)}`, token)).values ?? []
+    // Raw cell values, not display text: amounts keep every decimal whatever the cell format, dates arrive as serials.
+    values = (await call(valuesUrl(`${SHEET_RANGE}!A:${LAST_COLUMN}`, "?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER"), token)).values ?? []
     // Each server instance learns the title on its first pull, not only at sign-in.
     if (!pull.title) pull.title = (await call(`${API}/${SHEET_ID}?fields=properties.title`, token))?.properties?.title ?? ""
   } catch (exc) {
     return [[], "Couldn't read the sheet: your Google account " + explain(exc)]
   }
   const rows: RawVoucher[] = []
-  values.slice(2).forEach((raw, i) => { // skip header row and the blank spacer row beneath it
-    if (!raw.some(Boolean)) return
-    const row = { sheet_row: i + 3 } as RawVoucher
-    COLUMNS.forEach((name, j) => { if (name) row[name] = raw[j] ?? "" })
+  values.slice(FIRST_ROW - 1).forEach((raw, i) => {
+    if (!raw.some((v) => v !== "")) return
+    const row = { sheet_row: i + FIRST_ROW } as RawVoucher
+    COLUMNS.forEach((name, j) => {
+      const v = raw[j] ?? ""
+      if (name) row[name] = typeof v === "number" && name === "dv_date" ? serialDate(v) : String(v)
+    })
     rows.push(row)
   })
   return [rows, null]
@@ -118,23 +124,23 @@ const valuesUrl = (range: string, query: string) =>
   `${API}/${SHEET_ID}/values/${encodeURIComponent(range)}${query}`
 const ordered = (fields: Record<Field, string>) => COLUMNS.map((name) => (name ? fields[name] ?? "" : ""))
 
-/** Overwrite one data row (A:L). */
+/** Set column K (status) on many rows in one request. */
+export function setStatuses(token: string | null, sheetRows: number[], status: string) {
+  return write(token, `${API}/${SHEET_ID}/values:batchUpdate`, "POST", {
+    valueInputOption: "USER_ENTERED",
+    data: sheetRows.map((r) => ({ range: `${SHEET_RANGE}!K${r}`, values: [[status]] })),
+  })
+}
+
+/** Overwrite one data row (A:K). */
 export function updateVoucherRow(token: string | null, sheetRow: number, fields: Record<Field, string>) {
-  return write(token, valuesUrl(`${SHEET_RANGE}!A${sheetRow}:L${sheetRow}`, "?valueInputOption=USER_ENTERED"), "PUT",
+  return write(token, valuesUrl(`${SHEET_RANGE}!A${sheetRow}:${LAST_COLUMN}${sheetRow}`, "?valueInputOption=USER_ENTERED"), "PUT",
     { values: [ordered(fields)] })
 }
 
 export function appendVoucher(token: string | null, fields: Record<Field, string>) {
-  return write(token, valuesUrl(`${SHEET_RANGE}!A:L`, ":append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS"), "POST",
+  return write(token, valuesUrl(`${SHEET_RANGE}!A:${LAST_COLUMN}`, ":append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS"), "POST",
     { values: [ordered(fields)] })
-}
-
-/** Write only the status cells, {sheetRow: status}, in one request, so stale cached rows can't overwrite other columns. */
-export function setStatuses(token: string | null, statuses: Record<number, string>) {
-  return write(token, `${API}/${SHEET_ID}/values:batchUpdate`, "POST", {
-    valueInputOption: "USER_ENTERED", // batchUpdate takes this in the body, not the query
-    data: Object.entries(statuses).map(([n, s]) => ({ range: `${SHEET_RANGE}!${STATUS_COLUMN}${n}`, values: [[s]] })),
-  })
 }
 
 export const sheetUrl = SHEET_ID ? `https://docs.google.com/spreadsheets/d/${SHEET_ID}` : ""

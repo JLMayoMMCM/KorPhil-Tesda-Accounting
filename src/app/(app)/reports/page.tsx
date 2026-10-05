@@ -5,15 +5,15 @@ import Image from "next/image"
 import Link from "next/link"
 
 import { AutoSubmitSelect } from "@/components/auto-submit"
-import { BarList, Columns, Donut, Totals } from "@/components/charts"
+import { BarList, Columns, Totals } from "@/components/charts"
 import { PrintButton } from "@/components/print-button"
-import { StatusBadge } from "@/components/status-badge"
+import { IssueBadges } from "@/components/issue-badges"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { NativeSelectOption } from "@/components/ui/native-select"
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getData } from "@/lib/data"
-import { BUCKETS, group, label, monthLabel, months, peso, qs, STATE_LABELS, toParams, total, values } from "@/lib/ledger"
+import { monthLabel, months, peso, qs, toParams, total, values } from "@/lib/ledger"
 import { buildReport, REPORTS, type Kind } from "@/lib/reports"
 import { fullName } from "@/lib/session"
 
@@ -21,20 +21,21 @@ export const metadata: Metadata = { title: "Reports" }
 
 const fmtShare = (v: number, of: number) => `${of ? ((100 * v) / of).toFixed(1) : "0.0"}%`
 
-/** Late buckets are overdue money, so they take the overdue hue; everything else stays navy. */
-const AGING_COLORS: Record<string, string> = { [BUCKETS.late30]: "var(--chart-overdue)", [BUCKETS.late]: "var(--chart-overdue)" }
-
 const CHART_TITLES: Record<Exclude<Kind, "audit">, string> = {
-  summary: "Share by status", aging: "Unpaid amount by age", area: "Amount by trade area", category: "Amount by category", monthly: "Amount by month",
+  monthly: "Amount by month", area: "Amount by trade area", program: "Amount by diploma / ST / assessment",
+  category: "Amount by category", payee: "Amount by payee", review: "Amount by review check",
 }
+/** Long groupings chart only their largest bars; the table below lists every line. */
+const CHART_LIMIT = 15
 
-const HEADINGS: Partial<Record<Kind, string>> = { summary: "Status", aging: "Age", monthly: "Month", category: "Category", area: "Trade area" }
+const HEADINGS: Partial<Record<Kind, string>> = {
+  monthly: "Month", area: "Trade area", program: "Diploma / ST / Assessment", category: "Category", payee: "Payee", review: "Check",
+}
 
 export default async function Reports({ searchParams }: PageProps<"/reports">) {
   const params = toParams(await searchParams)
   const { rows, pull, user } = await getData()
-  const { kind, month, area, state, scoped, lines } = buildReport(rows, params)
-  const byArea = group(scoped, (r) => label(r, "trade_area"))
+  const { kind, month, area, scoped, lines } = buildReport(rows, params)
   const totalAmt = total(scoped)
   const generated = new Date().toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Manila" })
 
@@ -54,8 +55,6 @@ export default async function Reports({ searchParams }: PageProps<"/reports">) {
           {word("month", "Month", month, [["", "All months"], ...months(rows).map((m): [string, string] => [m, monthLabel(m)])])}
           <span>across</span>
           {word("area", "Trade area", area, [["", "All trade areas"], ...values(rows, "trade_area").map((a): [string, string] => [a, a])])}
-          <span>and</span>
-          {word("status", "Status", state, [["", "All statuses"], ...Object.entries(STATE_LABELS)])}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm text-muted-foreground">Output</span>
@@ -96,32 +95,27 @@ export default async function Reports({ searchParams }: PageProps<"/reports">) {
             <header className="flex flex-col items-center gap-1 text-center">
               <h2 className="font-heading text-xl font-bold tracking-tight text-balance">{REPORTS[kind]}</h2>
               <p className="text-sm text-muted-foreground">
-                {[monthLabel(month), area || "All trade areas", STATE_LABELS[state as keyof typeof STATE_LABELS] ?? "All statuses"].join(" · ")}
+                {[monthLabel(month), area || "All trade areas"].join(" · ")}
               </p>
             </header>
 
             {!scoped.length ? (
-              <p className="py-8 text-center text-muted-foreground">No vouchers match these choices. Widen the month, trade area, or status above.</p>
+              <p className="py-8 text-center text-muted-foreground">No vouchers match these choices. Widen the month or trade area above.</p>
             ) : (
               <>
                 <Totals rows={scoped} />
 
                 {kind !== "audit" && (
                   <section className="flex flex-col gap-4 break-inside-avoid">
-                    <h3 className="font-heading text-base font-bold">{CHART_TITLES[kind]}</h3>
-                    {kind === "summary" ? (
-                      <Donut caption="Amount by status" slices={lines.map((l) => ({ label: l.label, value: l.amount, color: `var(--chart-${l.state})`, mark: l.state || undefined }))} />
-                    ) : kind === "monthly" ? (
+                    <h3 className="font-heading text-base font-bold">
+                      {CHART_TITLES[kind]}{kind !== "monthly" && lines.length > CHART_LIMIT && `, largest ${CHART_LIMIT}`}
+                    </h3>
+                    {kind === "monthly" ? (
                       <Columns caption="Amount by month" items={[...lines].reverse().map((l) => ({ label: l.label, value: l.amount }))} />
                     ) : (
-                      <BarList caption={CHART_TITLES[kind]} items={lines.map((l) => ({ label: l.label, value: l.amount, color: kind === "aging" ? AGING_COLORS[l.label] : undefined }))} />
+                      <BarList caption={CHART_TITLES[kind]} items={lines.slice(0, CHART_LIMIT).map((l) => ({ label: l.label, value: l.amount }))} />
                     )}
-                  </section>
-                )}
-                {kind === "summary" && byArea.length > 0 && (
-                  <section className="flex flex-col gap-4 break-inside-avoid">
-                    <h3 className="font-heading text-base font-bold">By trade area</h3>
-                    <BarList caption="Amount by trade area" items={byArea.map(([name, , amt]) => ({ label: name, value: amt }))} />
+                    {kind === "review" && <p className="text-sm text-muted-foreground">A voucher can fail more than one check, so these lines can add up to more than the total.</p>}
                   </section>
                 )}
 
@@ -131,7 +125,7 @@ export default async function Reports({ searchParams }: PageProps<"/reports">) {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          {["DV #", "DV date", "Due", "Payee", "Particulars", "Area", "Status"].map((h) => <TableHead key={h}>{h}</TableHead>)}
+                          {["DV #", "DV date", "Payee", "Particulars", "Area", "Check #", "Review"].map((h) => <TableHead key={h}>{h}</TableHead>)}
                           <TableHead className="text-right">Amount</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -140,11 +134,11 @@ export default async function Reports({ searchParams }: PageProps<"/reports">) {
                           <TableRow key={r.sheet_row}>
                             <TableHead scope="row" className="font-medium">{r.dv_no}</TableHead>
                             <TableCell>{r.dv_date}</TableCell>
-                            <TableCell>{r.due_date}</TableCell>
                             <TableCell>{r.payee}</TableCell>
                             <TableCell className="max-w-56 truncate">{r.particulars}</TableCell>
                             <TableCell>{r.trade_area}</TableCell>
-                            <TableCell><StatusBadge state={r.state} /></TableCell>
+                            <TableCell className="tabular-nums">{r.check_number}</TableCell>
+                            <TableCell><IssueBadges issues={r.issues} /></TableCell>
                             <TableCell className="text-right tabular-nums">{peso(r.amount)}</TableCell>
                           </TableRow>
                         ))}
@@ -169,7 +163,7 @@ export default async function Reports({ searchParams }: PageProps<"/reports">) {
                       <TableBody>
                         {lines.map((l) => (
                           <TableRow key={l.label}>
-                            <TableCell>{l.state ? <StatusBadge state={l.state}>{l.label}</StatusBadge> : l.label}</TableCell>
+                            <TableCell>{l.label}</TableCell>
                             <TableCell className="text-right tabular-nums">{l.count}</TableCell>
                             <TableCell className="text-right font-medium tabular-nums">{peso(l.amount)}</TableCell>
                             <TableCell className="text-right text-muted-foreground tabular-nums">{fmtShare(l.amount, totalAmt)}</TableCell>

@@ -1,4 +1,4 @@
-import { AlarmClockIcon, MapIcon, SheetIcon } from "lucide-react"
+import { ClipboardCheckIcon, MapIcon, SheetIcon } from "lucide-react"
 import type { Metadata } from "next"
 import { cookies, headers } from "next/headers"
 import Image from "next/image"
@@ -23,9 +23,9 @@ const ERRORS: Record<string, string> = {
 }
 
 const POINTS = [
-  { Icon: AlarmClockIcon, title: "See what's overdue first.", text: "Unpaid vouchers are grouped by how late they are." },
+  { Icon: ClipboardCheckIcon, title: "Audit-ready records.", text: "Every voucher is checked for a missing or duplicate DV #, a missing check # and missing tags." },
   { Icon: SheetIcon, title: "Edit once, saved to the sheet.", text: "Every change is written to the Google Sheet under your name." },
-  { Icon: MapIcon, title: "Totals by trade area.", text: "Aging, splits and reports you can download or print." },
+  { Icon: MapIcon, title: "Totals by trade area.", text: "Monthly, program and category splits you can download or print." },
 ]
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
@@ -42,24 +42,35 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
 
   return (
     <div className="grid min-h-svh lg:grid-cols-2">
-      <aside className="hidden flex-col justify-between gap-10 bg-muted p-10 lg:flex">
-        <p className="font-semibold">KorPhil-TESDA <span className="font-normal text-muted-foreground">Disbursements</span></p>
-        <div className="flex flex-col items-start gap-4">
-          <Image src="/logo.webp" alt="Korea-Philippines Vocational Training Center seal" width={160} height={160} priority />
-          <h2 className="font-heading text-3xl font-semibold text-balance">Korea-Philippines Vocational Training Center</h2>
-          <p className="text-muted-foreground">Regional Training Center Davao</p>
+      {/* Brand panel in the app shell's TESDA navy (the sidebar tokens), so sign-in and the workspace read as one place. */}
+      <aside className="hidden flex-col justify-between gap-10 bg-sidebar p-10 text-sidebar-foreground lg:flex xl:p-14">
+        <p className="font-semibold">KorPhil-TESDA <span className="font-normal text-sidebar-foreground/70">Disbursements</span></p>
+        <div className="flex flex-col items-start gap-6">
+          {/* The seal has white corners, so it sits on a white disc with a soft ring rather than straight on navy. */}
+          <span className="rounded-full bg-white p-1.5 shadow-[0_8px_24px_-8px_rgb(0_0_0/0.45)] ring-4 ring-white/15">
+            <Image src="/logo.webp" alt="Korea-Philippines Vocational Training Center seal" width={168} height={168} priority className="rounded-full" />
+          </span>
+          <div className="flex flex-col gap-2">
+            <h2 className="max-w-md font-heading text-3xl font-semibold tracking-tight text-balance xl:text-4xl">Korea-Philippines Vocational Training Center</h2>
+            <p className="text-sidebar-foreground/70">Regional Training Center Davao</p>
+          </div>
         </div>
-        <ul className="flex flex-col gap-4 text-sm">
+        <ul className="flex max-w-md flex-col gap-4 border-t border-sidebar-foreground/15 pt-6 text-sm">
           {POINTS.map(({ Icon, title, text }) => (
             <li key={title} className="flex gap-3">
-              <Icon className="mt-0.5 shrink-0 text-muted-foreground" />
-              <span><strong className="font-medium">{title}</strong> <span className="text-muted-foreground">{text}</span></span>
+              <Icon className="mt-0.5 size-4 shrink-0 text-sidebar-foreground/70" />
+              <span><strong className="font-medium">{title}</strong> <span className="text-sidebar-foreground/70">{text}</span></span>
             </li>
           ))}
         </ul>
       </aside>
 
       <main className="flex flex-col items-center justify-center gap-6 p-6">
+        {/* Below lg the brand panel is hidden; keep the seal and name above the card. */}
+        <div className="flex flex-col items-center gap-3 text-center lg:hidden">
+          <Image src="/logo.webp" alt="Korea-Philippines Vocational Training Center seal" width={72} height={72} className="rounded-full" />
+          <p className="font-semibold">KorPhil-TESDA <span className="font-normal text-muted-foreground">Disbursements</span></p>
+        </div>
         <Card className="w-full max-w-sm">
           <CardHeader>
             <CardTitle className="text-xl">Sign in</CardTitle>

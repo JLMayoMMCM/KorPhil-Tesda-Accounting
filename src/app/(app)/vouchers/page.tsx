@@ -1,10 +1,10 @@
-import { ListFilterIcon, SearchXIcon, XIcon } from "lucide-react"
+import { BadgeCheckIcon, ListFilterIcon, SearchXIcon, XIcon } from "lucide-react"
 import type { Metadata } from "next"
 import Form from "next/form"
 import Link from "next/link"
 
-import { LinkRow, PayButton, RowCheck, SelectAll, Selection } from "@/components/selection"
-import { StatusBadge } from "@/components/status-badge"
+import { IssueBadges } from "@/components/issue-badges"
+import { LinkRow, RowCheck, SelectAll, Selection } from "@/components/selection"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
@@ -15,8 +15,8 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import { VoucherPanel } from "@/components/voucher-panel"
 import { clock, getData } from "@/lib/data"
 import {
-  BUCKETS, FIELDS, filterRows, inTab, monthLabel, months, NOT_SET, parseDate, peso, qs, shortDate, TABS, toParams, total,
-  values, type Bucket, type Field as FieldName, type Tab, type Voucher,
+  FIELDS, filterRows, FOR_REVIEW, inTab, isVerified, ISSUES, monthLabel, VERIFIED, months, NOT_SET, parseDate, peso, qs, longDate, TABS, toParams, total,
+  values, type Field as FieldName, type Issue, type Tab, type Voucher,
 } from "@/lib/ledger"
 import { cn } from "@/lib/utils"
 
@@ -25,8 +25,8 @@ export const metadata: Metadata = { title: "Vouchers" }
 /** Panel form values: sheet values, with parseable dates as ISO for the date pickers. */
 function formFromRow(r: Voucher | null): Record<FieldName, string> {
   const form = Object.fromEntries(FIELDS.map((f) => [f, r ? r[f] : ""])) as Record<FieldName, string>
-  if (!r) form.status = "PENDING"
-  for (const f of ["dv_date", "due_date"] as const) form[f] = parseDate(form[f]) ?? form[f]
+  form.dv_date = parseDate(form.dv_date) ?? form.dv_date
+  form.status = r && isVerified(r) ? VERIFIED : FOR_REVIEW
   return form
 }
 
@@ -44,13 +44,14 @@ export default async function Vouchers({ searchParams }: PageProps<"/vouchers">)
   const closeUrl = "/vouchers/" + qs(params, { open: null, new: null })
 
   const chips: [string, string][] = []
-  const area = params.get("area"), month = params.get("month"), bucket = params.get("bucket"), q = params.get("q")
+  const area = params.get("area"), month = params.get("month"), issue = params.get("issue"), q = params.get("q"), year = params.get("year")
+  if (year) chips.push([`DV date in ${year}`, qs(params, { year: null, open: null })])
   if (area) chips.push([`Area is ${area}`, qs(params, { area: null, open: null })])
   if (month) chips.push([`DV date in ${monthLabel(month)}`, qs(params, { month: null, open: null })])
-  if (bucket && bucket in BUCKETS) chips.push([BUCKETS[bucket as Bucket], qs(params, { bucket: null, open: null })])
+  if (issue) chips.push([issue in ISSUES ? ISSUES[issue as Issue] : issue === "none" ? "No review flags" : issue === "any" ? "Any review flag" : `Check: ${issue}`, qs(params, { issue: null, open: null })])
   if (q) chips.push([`Matches “${q}”`, qs(params, { q: null, open: null })])
-  const clearUrl = qs(params, { area: null, month: null, bucket: null, q: null, open: null })
-  const filterCount = [area, month, bucket].filter(Boolean).length
+  const clearUrl = qs(params, { area: null, month: null, year: null, issue: null, q: null, open: null })
+  const filterCount = [area, month, year, issue].filter(Boolean).length
   const wide = cn(panel && "hidden") // secondary columns hide while the panel is open
 
   return (
@@ -72,13 +73,22 @@ export default async function Vouchers({ searchParams }: PageProps<"/vouchers">)
                 <Form action="/vouchers/">
                   <input type="hidden" name="tab" value={tab} />
                   {q && <input type="hidden" name="q" value={q} />}
-                  {bucket && <input type="hidden" name="bucket" value={bucket} />}
+                  {year && <input type="hidden" name="year" value={year} />}
                   <FieldGroup>
                     <Field>
                       <FieldLabel htmlFor="f-area">Trade area</FieldLabel>
                       <NativeSelect id="f-area" name="area" defaultValue={area ?? ""} className="w-full">
                         <NativeSelectOption value="">Any area</NativeSelectOption>
                         {values(rows, "trade_area").map((a) => <NativeSelectOption key={a} value={a}>{a}</NativeSelectOption>)}
+                      </NativeSelect>
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="f-issue">Review check</FieldLabel>
+                      <NativeSelect id="f-issue" name="issue" defaultValue={issue ?? ""} className="w-full">
+                        <NativeSelectOption value="">Any</NativeSelectOption>
+                        <NativeSelectOption value="none">No review flags</NativeSelectOption>
+                        <NativeSelectOption value="any">Any review flag</NativeSelectOption>
+                        {Object.entries(ISSUES).map(([k, t]) => <NativeSelectOption key={k} value={k}>{t}</NativeSelectOption>)}
                       </NativeSelect>
                     </Field>
                     <Field>
@@ -109,22 +119,22 @@ export default async function Vouchers({ searchParams }: PageProps<"/vouchers">)
         )}
 
         {shown.length ? (
-          <Selection items={shown.filter((r) => r.state !== "paid").map(({ sheet_row, dv_no, amount }) => ({ sheet_row, dv_no, amount }))}>
+          <Selection items={shown.map(({ sheet_row, dv_no, amount }) => ({ sheet_row, dv_no, amount }))}>
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className={cn("w-8", wide)}><SelectAll /></TableHead>
-                  <TableHead>DV #</TableHead>
                   <TableHead className={wide}>DV date</TableHead>
-                  <TableHead>Due</TableHead>
+                  <TableHead>DV #</TableHead>
                   <TableHead>Payee</TableHead>
                   <TableHead className={wide}>Particulars</TableHead>
                   <TableHead className={wide}>Area</TableHead>
                   <TableHead className={wide}>Program</TableHead>
                   <TableHead className={wide}>Category</TableHead>
+                  <TableHead>Check #</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className={wide}><span className="sr-only">Actions</span></TableHead>
+                  <TableHead>Review</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -132,23 +142,22 @@ export default async function Vouchers({ searchParams }: PageProps<"/vouchers">)
                   const openUrl = "/vouchers/" + qs(params, { open: String(r.sheet_row), new: null })
                   return (
                     <LinkRow key={r.sheet_row} href={openUrl} data-state={panelRow?.sheet_row === r.sheet_row ? "selected" : undefined}>
-                      <TableCell className={wide}>{r.state !== "paid" && <RowCheck row={r.sheet_row} label={r.dv_no} />}</TableCell>
+                      <TableCell className={wide}><RowCheck row={r.sheet_row} label={r.dv_no} /></TableCell>
+                      <TableCell className={cn("whitespace-nowrap text-muted-foreground", wide)}>{r.dv ? longDate(r.dv) : r.dv_date}</TableCell>
                       <TableCell className="font-medium"><Link className="hover:underline" href={openUrl} scroll={false}>{r.dv_no || "Untitled DV"}</Link></TableCell>
-                      <TableCell className={cn("text-muted-foreground", wide)}>{r.dv ? shortDate(r.dv) : r.dv_date}</TableCell>
-                      <TableCell>
-                        {r.days_late ? <strong className="text-destructive">{r.days_late}d late</strong>
-                          : r.bucket === "today" ? "Today" : r.due ? shortDate(r.due) : r.due_date}
-                      </TableCell>
                       <TableCell className="max-w-40 truncate">{r.payee}</TableCell>
                       <TableCell className={cn("max-w-56 truncate text-muted-foreground", wide)}>{r.particulars}</TableCell>
                       <TableCell className={wide}>{r.trade_area || "—"}</TableCell>
                       <TableCell className={wide}>{r.diploma_st_assessment || "—"}</TableCell>
                       <TableCell className={wide}>{r.category || "—"}</TableCell>
+                      <TableCell className="text-muted-foreground tabular-nums">{r.check_number || "—"}</TableCell>
                       <TableCell className="text-right font-medium tabular-nums">{peso(r.amount)}</TableCell>
-                      <TableCell><StatusBadge state={r.state} /></TableCell>
-                      <TableCell className={cn("text-right", wide)}>
-                        {r.state !== "paid" && <PayButton item={{ sheet_row: r.sheet_row, dv_no: r.dv_no, amount: r.amount }} />}
+                      <TableCell>
+                        {isVerified(r)
+                          ? <Badge variant="outline" className="border-primary/40 text-primary"><BadgeCheckIcon data-icon="inline-start" />{VERIFIED}</Badge>
+                          : <span className="whitespace-nowrap text-muted-foreground">{FOR_REVIEW}</span>}
                       </TableCell>
+                      <TableCell><IssueBadges issues={r.issues} /></TableCell>
                     </LinkRow>
                   )
                 })}
@@ -187,16 +196,7 @@ export default async function Vouchers({ searchParams }: PageProps<"/vouchers">)
           row={panelRow?.sheet_row ?? null}
           initial={formFromRow(panelRow)}
           heading={isNew ? "New voucher" : panelRow!.dv_no || "Untitled DV"}
-          status={panelRow ? (
-            <StatusBadge state={panelRow.state}>
-              {[
-                panelRow.state.charAt(0).toUpperCase() + panelRow.state.slice(1),
-                panelRow.days_late ? `${panelRow.days_late} day${plural(panelRow.days_late)} late` : "",
-                panelRow.due ? `due ${shortDate(panelRow.due)}` : "",
-              ].filter(Boolean).join(" · ")}
-            </StatusBadge>
-          ) : "Adds a new row at the bottom of the sheet."}
-          payable={panelRow && panelRow.state !== "paid" ? { sheet_row: panelRow.sheet_row, dv_no: panelRow.dv_no, amount: panelRow.amount } : null}
+          status={panelRow ? <IssueBadges issues={panelRow.issues} /> : "Adds a new row at the bottom of the sheet."}
           source={panelRow ? `Source: ${pull.title || "Google Sheet"} · row ${panelRow.sheet_row} · pulled ${clock(pull.at)}` : ""}
           options={{
             trade_area: values(rows, "trade_area").filter((v) => v !== NOT_SET),

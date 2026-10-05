@@ -1,11 +1,11 @@
 "use client"
 
-// Page behavior shared by every screen (was app.js): confirm and busy dialogs, toasts with Undo,
+// Page behavior shared by every screen (was app.js): confirm and busy dialogs, error toasts,
 // the unsaved-changes guard, and keyboard shortcuts.
 import { useRouter } from "next/navigation"
 import * as React from "react"
 
-import { markPaid, undoPaid, type Result } from "@/app/actions"
+import type { Result } from "@/app/actions"
 import {
   AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Spinner } from "@/components/ui/spinner"
 import { toast } from "@/components/ui/toast"
-import { peso } from "@/lib/ledger"
 
 type Ask = { title: string; note: string; ok: string; resolve: (yes: boolean) => void }
 type UI = {
@@ -22,8 +21,6 @@ type UI = {
   confirm: (title: string, note: string, ok: string) => Promise<boolean>
   /** Block the page while a sheet write runs; toasts a failure unless the caller shows it inline. */
   run: <T extends Result>(busy: string, action: () => Promise<T>, opts?: { inlineError?: boolean }) => Promise<T>
-  /** Confirm, mark paid, toast with Undo. */
-  pay: (rows: { sheet_row: number; dv_no: string; amount: number }[]) => Promise<boolean>
   /** Changed field names of the open voucher form ("" when clean). */
   setDirty: (changed: string) => void
   /** Run navigate() now, or after "Discard unsaved changes?" if the form has edits. */
@@ -59,32 +56,6 @@ export function AppUI({ children }: { children: React.ReactNode }) {
       setBusy("")
     }
   }, [])
-
-  const pay = React.useCallback<UI["pay"]>(async (rows) => {
-    const sum = rows.reduce((a, r) => a + r.amount, 0)
-    const title = rows.length === 1
-      ? `Mark ${rows[0].dv_no || "this DV"} paid (${peso(sum)})?`
-      : `Mark ${rows.length} vouchers paid (${peso(sum)})?`
-    if (!(await confirm(title, "This writes PAID to the Status column in the Google Sheet.", "Mark paid"))) return false
-    const result = await run("Marking paid…", () => markPaid(rows.map((r) => r.sheet_row)))
-    if (result.ok) {
-      const before = result.before ?? {}
-      const id = toast.add({
-        title: result.message,
-        type: "success",
-        timeout: 12_000, // pauses while hovered
-        actionProps: {
-          children: "Undo",
-          onClick: async () => {
-            toast.close(id)
-            const undone = await run("Undoing…", () => undoPaid(before))
-            if (undone.ok) toast.add({ title: undone.message, type: "success" })
-          },
-        },
-      })
-    }
-    return result.ok
-  }, [confirm, run])
 
   const leave = React.useCallback<UI["leave"]>((navigate) => {
     if (!dirty.current) return navigate()
@@ -135,7 +106,7 @@ export function AppUI({ children }: { children: React.ReactNode }) {
     }
   }, [leave, router])
 
-  const ui = React.useMemo(() => ({ confirm, run, pay, setDirty, leave }), [confirm, run, pay, setDirty, leave])
+  const ui = React.useMemo(() => ({ confirm, run, setDirty, leave }), [confirm, run, setDirty, leave])
   return (
     <Ctx value={ui}>
       {children}

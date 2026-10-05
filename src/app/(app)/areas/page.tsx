@@ -12,13 +12,11 @@ import { Field, FieldLabel } from "@/components/ui/field"
 import { NativeSelectOption } from "@/components/ui/native-select"
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getData } from "@/lib/data"
-import { BUCKETS, label, monthLabel, months, peso, qs, toParams, total, values, type Bucket, type Field as FieldName } from "@/lib/ledger"
+import { label, monthLabel, months, peso, qs, toParams, total, values, type Field as FieldName } from "@/lib/ledger"
 import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = { title: "Trade Areas" }
 
-const COLUMNS: [Bucket, Bucket[]][] = [["later", ["later"]], ["week", ["today", "week"]], ["late", ["late"]], ["late30", ["late30"]], ["paid", ["paid"]]]
-const HEAT = ["", "bg-destructive/10", "bg-destructive/20", "bg-destructive/30"]
 const dvs = (n: number) => `${n} DV${n === 1 ? "" : "s"}`
 
 export default async function Areas({ searchParams }: PageProps<"/areas">) {
@@ -27,26 +25,25 @@ export default async function Areas({ searchParams }: PageProps<"/areas">) {
   const period = params.get("period") ?? ""
   const byCount = params.get("by") === "count"
   const scoped = rows.filter((r) => !period || r.month === period)
-  const unpaidAll = scoped.filter((r) => r.state !== "paid")
   const areas = values(scoped, "trade_area")
   const inArea = (a: string) => scoped.filter((r) => label(r, "trade_area") === a)
+  // One column per DV month, oldest first; "" collects rows with no readable DV date.
+  const columns = [...months(scoped).reverse(), ...(scoped.some((r) => !r.month) ? [""] : [])]
+  const colName = (m: string) => (m ? monthLabel(m) : "No DV date")
 
-  const lateMax = Math.max(0, ...areas.flatMap((a) => (["late", "late30"] as const).map((b) => total(inArea(a).filter((r) => r.bucket === b))))) || 1
   const matrix = areas.map((area) => {
     const mine = inArea(area)
-    const cells = COLUMNS.map(([key, buckets]) => {
-      const hit = mine.filter((r) => buckets.includes(r.bucket))
+    const cells = columns.map((key) => {
+      const hit = mine.filter((r) => r.month === key)
       return {
         key, count: hit.length, amount: total(hit),
-        heat: (key === "late" || key === "late30") && hit.length ? Math.min(3, Math.ceil((3 * total(hit)) / lateMax)) : 0,
-        url: "/vouchers/" + qs(new URLSearchParams(), { area, bucket: key, month: period }),
+        url: "/vouchers/" + qs(new URLSearchParams(), key ? { area, month: key } : { area, issue: "no_date" }),
       }
     })
-    const unpaid = mine.filter((r) => r.state !== "paid")
-    const share = total(unpaidAll) ? (100 * total(unpaid)) / total(unpaidAll) : 0
-    return { area, cells, unpaid: total(unpaid), unpaidCount: unpaid.length, share, shareLabel: share > 0 && share < 1 ? "<1" : String(Math.round(share)) }
+    const share = total(scoped) ? (100 * total(mine)) / total(scoped) : 0
+    return { area, cells, sum: total(mine), count: mine.length, share, shareLabel: share > 0 && share < 1 ? "<1" : String(Math.round(share)) }
   })
-  const totals = COLUMNS.map((_, i) => ({
+  const totals = columns.map((_, i) => ({
     count: matrix.reduce((a, m) => a + m.cells[i].count, 0),
     amount: matrix.reduce((a, m) => a + m.cells[i].amount, 0),
   }))
@@ -87,9 +84,9 @@ export default async function Areas({ searchParams }: PageProps<"/areas">) {
             <TableHeader>
               <TableRow>
                 <TableHead>Area</TableHead>
-                {COLUMNS.map(([key]) => <TableHead key={key} className="text-right">{BUCKETS[key]}</TableHead>)}
-                <TableHead className="text-right">Unpaid total</TableHead>
-                <TableHead className="w-40">Share of unpaid</TableHead>
+                {columns.map((key) => <TableHead key={key} className="text-right">{colName(key)}</TableHead>)}
+                <TableHead className="text-right">Total</TableHead>
+                <TableHead className="w-40">Share of total</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -99,16 +96,15 @@ export default async function Areas({ searchParams }: PageProps<"/areas">) {
                   {m.cells.map((c) => (
                     <TableCell key={c.key} className="p-1 text-right">
                       {c.count ? (
-                        <Link href={c.url} className={cn("flex flex-col items-end rounded-md px-2 py-1 tabular-nums hover:bg-muted", HEAT[c.heat])}
-                          aria-label={`Open ${dvs(c.count)}: ${m.area}, ${BUCKETS[c.key]}`}>
+                        <Link href={c.url} className="flex flex-col items-end rounded-md px-2 py-1 tabular-nums hover:bg-muted"
+                          aria-label={`Open ${dvs(c.count)}: ${m.area}, ${colName(c.key)}`}>
                           {pair(c.count, c.amount)}
                         </Link>
                       ) : <span className="px-2 text-muted-foreground" aria-label="none">—</span>}
                     </TableCell>
                   ))}
                   <TableCell className="text-right">
-                    {m.unpaidCount ? <span className="flex flex-col items-end tabular-nums">{pair(m.unpaidCount, m.unpaid)}</span>
-                      : <span className="text-muted-foreground">—</span>}
+                    <span className="flex flex-col items-end tabular-nums">{pair(m.count, m.sum)}</span>
                   </TableCell>
                   <TableCell>
                     <span className="grid grid-cols-[1fr_3rem] items-center gap-2">
@@ -123,7 +119,7 @@ export default async function Areas({ searchParams }: PageProps<"/areas">) {
               <TableRow>
                 <TableHead scope="row">All areas</TableHead>
                 {totals.map((t, i) => <TableCell key={i} className="text-right tabular-nums">{byCount ? t.count : peso(t.amount)}</TableCell>)}
-                <TableCell className="text-right tabular-nums">{byCount ? unpaidAll.length : peso(total(unpaidAll))}</TableCell>
+                <TableCell className="text-right tabular-nums">{byCount ? scoped.length : peso(total(scoped))}</TableCell>
                 <TableCell />
               </TableRow>
             </TableFooter>

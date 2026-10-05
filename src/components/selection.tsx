@@ -1,24 +1,26 @@
 "use client"
 
-// Row checkboxes, the bulk bar (Mark N paid / Export / Clear), and the per-row Mark paid button.
-import { DownloadIcon } from "lucide-react"
+// Row checkboxes and the bulk bar (Verify / For review / Export / Clear).
+import { BadgeCheckIcon, DownloadIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import * as React from "react"
 
+import { setStatus } from "@/app/actions"
 import { useUI } from "@/components/app-ui"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { TableRow } from "@/components/ui/table"
+import { toast } from "@/components/ui/toast"
 import { peso } from "@/lib/ledger"
 
-export type Payable = { sheet_row: number; dv_no: string; amount: number }
-type Ctx = { items: Payable[]; selected: Set<number>; toggle: (row: number, on: boolean) => void; setAll: (on: boolean) => void }
+export type Item = { sheet_row: number; dv_no: string; amount: number }
+type Ctx = { items: Item[]; selected: Set<number>; toggle: (row: number, on: boolean) => void; setAll: (on: boolean) => void }
 const SelectionCtx = React.createContext<Ctx | null>(null)
 const useSelection = () => React.use(SelectionCtx)!
 
-export function Selection({ items, children }: { items: Payable[]; children: React.ReactNode }) {
+export function Selection({ items, children }: { items: Item[]; children: React.ReactNode }) {
   const [selected, setSelected] = React.useState<Set<number>>(new Set())
-  // Drop rows that disappeared (paid, filtered away) after a refresh.
+  // Drop rows that disappeared (edited, filtered away) after a refresh.
   const live = React.useMemo(() => new Set(items.map((i) => i.sheet_row)), [items])
   const current = React.useMemo(() => new Set([...selected].filter((n) => live.has(n))), [selected, live])
   const toggle = React.useCallback((row: number, on: boolean) => setSelected((s) => {
@@ -57,32 +59,35 @@ export function SelectAll() {
 
 function BulkBar() {
   const { items, selected, setAll } = useSelection()
-  const { pay } = useUI()
+  const { run } = useUI()
   if (!selected.size) return null
   const rows = items.filter((i) => selected.has(i.sheet_row))
   const sum = rows.reduce((a, r) => a + r.amount, 0)
   const exportUrl = "/vouchers/export/?" + new URLSearchParams(rows.map((r) => ["sel", String(r.sheet_row)]))
+  const mark = async (verified: boolean) => {
+    const result = await run("Saving to the sheet…", () => setStatus(rows.map((r) => r.sheet_row), verified))
+    if (result.ok) {
+      toast.add({ title: result.message, type: "success" })
+      setAll(false)
+    }
+  }
   return (
     <div role="region" aria-label="Selection"
       className="sticky bottom-4 z-10 mx-auto mt-4 flex w-full max-w-2xl flex-wrap items-center gap-2 rounded-xl bg-foreground px-4 py-2 text-sm text-background shadow-lg">
       <span><strong>{rows.length}</strong> selected · <span className="tabular-nums">{peso(sum)}</span></span>
-      <Button variant="secondary" className="ml-auto" onClick={async () => { if (await pay(rows)) setAll(false) }}>
-        Mark {rows.length} paid
+      <Button variant="secondary" className="ml-auto" onClick={() => mark(true)}>
+        <BadgeCheckIcon data-icon="inline-start" />Verify {rows.length}
       </Button>
-      <Button variant="ghost" className="text-background hover:bg-background/10 hover:text-background" render={<a href={exportUrl} download />} nativeButton={false}>
-        <DownloadIcon data-icon="inline-start" />Export
+      <Button variant="ghost" className="text-background hover:bg-background/10 hover:text-background" onClick={() => mark(false)}>For review</Button>
+      <Button variant="secondary" render={<a href={exportUrl} download />} nativeButton={false}>
+        <DownloadIcon data-icon="inline-start" />Export {rows.length}
       </Button>
       <Button variant="ghost" className="text-background hover:bg-background/10 hover:text-background" onClick={() => setAll(false)}>Clear</Button>
     </div>
   )
 }
 
-export function PayButton({ item, ...props }: { item: Payable } & React.ComponentProps<typeof Button>) {
-  const { pay } = useUI()
-  return <Button variant="outline" size="sm" onClick={() => pay([item])} {...props}>{props.children ?? "Mark paid"}</Button>
-}
-
-/** A tbody whose rows stay hidden until "Show N" in its header row is pressed (Workspace "Later" group). */
+/** A tbody whose rows stay hidden until "Show N" in its header row is pressed (long Workspace groups). */
 export function CollapsedBody({ header, count, children }: { header: React.ReactNode; count: number; children: React.ReactNode }) {
   const [open, setOpen] = React.useState(false)
   return (

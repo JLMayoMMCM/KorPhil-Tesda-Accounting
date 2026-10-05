@@ -9,7 +9,7 @@ import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuBadge,
   SidebarMenuButton, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem, SidebarRail,
 } from "@/components/ui/sidebar"
-import type { Tab } from "@/lib/ledger"
+import { TABS, type Tab } from "@/lib/ledger"
 
 type Props = { counts: Record<Tab, number>; sheetTitle: string; synced: string; sheetUrl: string }
 
@@ -53,11 +53,11 @@ export function AppSidebar({ counts, sheetTitle, synced, sheetUrl }: Props) {
               </SidebarMenuButton>
               <SidebarMenuBadge>{counts.all}</SidebarMenuBadge>
               <SidebarMenuSub>
-                {([["overdue", "Overdue"], ["week", "Due this week"], ["unpaid", "Unpaid"]] as const).map(([key, name]) => (
+                {(Object.entries(TABS) as [Tab, string][]).filter(([key]) => key !== "all").map(([key, name]) => (
                   <SidebarMenuSubItem key={key}>
                     <SidebarMenuSubButton isActive={onVouchers && tab === key} render={<Link href={`/vouchers/?tab=${key}`} />}>
                       <span>{name}</span>
-                      <span className={key === "overdue" && counts.overdue ? "ml-auto font-semibold text-red-300 tabular-nums" : "ml-auto text-sidebar-foreground/70 tabular-nums"}>
+                      <span className="ml-auto text-sidebar-foreground/70 tabular-nums">
                         {counts[key]}
                       </span>
                     </SidebarMenuSubButton>
@@ -87,11 +87,11 @@ export function AppSidebar({ counts, sheetTitle, synced, sheetUrl }: Props) {
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" tooltip={`Open ${sheetTitle || "Google Sheet"}`}
+            <SidebarMenuButton size="lg" tooltip={`Open ${sheetTitle || "Google Sheet"}`} className="h-auto min-h-12"
               render={sheetUrl ? <a href={sheetUrl} target="_blank" rel="noopener" /> : <div />}>
               <FileSpreadsheetIcon />
               <span className="flex min-w-0 flex-col text-xs leading-tight">
-                <strong className="truncate text-sm font-medium">{sheetTitle || "Google Sheet"}</strong>
+                <strong className="text-sm font-medium break-words">{sheetTitle || "Google Sheet"}</strong>
                 <span className="truncate text-sidebar-foreground/70">{synced}</span>
               </span>
               {sheetUrl && <ExternalLinkIcon className="ml-auto opacity-70" />}

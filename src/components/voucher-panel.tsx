@@ -7,7 +7,6 @@ import * as React from "react"
 
 import { saveVoucher } from "@/app/actions"
 import { useUI } from "@/components/app-ui"
-import { PayButton, type Payable } from "@/components/selection"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
@@ -17,14 +16,13 @@ import { Kbd } from "@/components/ui/kbd"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
-import { FIELD_LABELS, STATUSES, type Field as FieldName } from "@/lib/ledger"
+import { FIELD_LABELS, FOR_REVIEW, VERIFIED, type Field as FieldName } from "@/lib/ledger"
 
 type Props = {
   row: number | null // null = new voucher
   initial: Record<FieldName, string>
   heading: string
   status: React.ReactNode
-  payable: Payable | null // set when the voucher is unpaid
   source: string
   options: { trade_area: string[]; diploma_st_assessment: string[]; category: string[] }
   closeUrl: string
@@ -32,7 +30,7 @@ type Props = {
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/
 
-export function VoucherPanel({ row, initial, heading, status, payable, source, options, closeUrl }: Props) {
+export function VoucherPanel({ row, initial, heading, status, source, options, closeUrl }: Props) {
   const router = useRouter()
   const { run, setDirty } = useUI()
   const [changed, setChanged] = React.useState<string[]>([])
@@ -66,8 +64,6 @@ export function VoucherPanel({ row, initial, heading, status, payable, source, o
       <Input id={name} name={name} defaultValue={initial[name]} {...props} />
     </Field>
   )
-  const date = (name: "dv_date" | "due_date") =>
-    text(name, { type: !initial[name] || ISO.test(initial[name]) ? "date" : "text" })
 
   const note = row === null
     ? "Not saved yet · appends a row"
@@ -81,7 +77,6 @@ export function VoucherPanel({ row, initial, heading, status, payable, source, o
           <h2 className="truncate font-heading text-lg font-semibold">{heading}</h2>
           <div className="text-sm text-muted-foreground">{status}</div>
         </div>
-        {payable && <PayButton item={payable} variant="default" size="default" data-key="p">Mark paid<Kbd>P</Kbd></PayButton>}
         <Button variant="ghost" size="icon" render={<Link href={closeUrl} scroll={false} />} nativeButton={false} aria-label="Close panel" data-key="escape">
           <XIcon />
         </Button>
@@ -96,14 +91,7 @@ export function VoucherPanel({ row, initial, heading, status, payable, source, o
 
       <FieldGroup className="grid grid-cols-2 gap-4">
         {text("dv_no", { required: true })}
-        <Field>
-          <FieldLabel htmlFor="status">Status</FieldLabel>
-          <NativeSelect id="status" name="status" defaultValue={initial.status.toUpperCase()} className="w-full">
-            {STATUSES.map((s) => <NativeSelectOption key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</NativeSelectOption>)}
-          </NativeSelect>
-        </Field>
-        {date("dv_date")}
-        {date("due_date")}
+        {text("dv_date", { type: !initial.dv_date || ISO.test(initial.dv_date) ? "date" : "text" })}
         {text("payee", {}, true)}
         <Field>
           <FieldLabel htmlFor="gross_amount">Gross amount</FieldLabel>
@@ -112,9 +100,17 @@ export function VoucherPanel({ row, initial, heading, status, payable, source, o
             <InputGroupInput id="gross_amount" name="gross_amount" defaultValue={initial.gross_amount} inputMode="decimal" required />
           </InputGroup>
         </Field>
-        {text("category", { list: "opt-category" })}
+        {text("check_number")}
         {text("trade_area", { list: "opt-area" })}
-        {text("diploma_st_assessment", { list: "opt-program" })}
+        {text("category", { list: "opt-category" })}
+        {text("diploma_st_assessment", { list: "opt-program" }, true)}
+        <Field className="col-span-2">
+          <FieldLabel htmlFor="status">{FIELD_LABELS.status}</FieldLabel>
+          <NativeSelect id="status" name="status" defaultValue={initial.status} className="w-full">
+            <NativeSelectOption value={FOR_REVIEW}>{FOR_REVIEW}</NativeSelectOption>
+            <NativeSelectOption value={VERIFIED}>{VERIFIED}</NativeSelectOption>
+          </NativeSelect>
+        </Field>
         <Field className="col-span-2">
           <FieldLabel htmlFor="particulars">Particulars</FieldLabel>
           <Textarea id="particulars" name="particulars" rows={3} defaultValue={initial.particulars} />

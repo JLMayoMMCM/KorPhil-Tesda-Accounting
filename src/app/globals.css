@@ -72,9 +72,6 @@
   --chart-3: oklch(0.546 0.245 262.881);
   --chart-4: oklch(0.488 0.243 264.376);
   --chart-5: oklch(0.424 0.199 265.638);
-  --chart-overdue: #b42318;
-  --chart-pending: #b86e00;
-  --chart-paid: #1b7a45;
   --radius: 0.625rem;
   --sidebar: #232a7c;
   --sidebar-foreground: #ffffff;
@@ -110,9 +107,6 @@
   --chart-3: oklch(0.546 0.245 262.881);
   --chart-4: oklch(0.488 0.243 264.376);
   --chart-5: oklch(0.424 0.199 265.638);
-  --chart-overdue: #e66767;
-  --chart-pending: #c98500;
-  --chart-paid: #2f9e5f;
   --sidebar: #181e62;
   --sidebar-foreground: #ffffff;
   --sidebar-primary: #ffffff;

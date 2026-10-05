@@ -20,7 +20,7 @@ export const getData = cache(async () => {
   const session = await getSession()
   const [raw, error] = await fetchVouchers(session.access_token)
   const today = todayManila()
-  const rows = enrich(raw, today)
+  const rows = enrich(raw)
   const counts = Object.fromEntries((Object.keys(TABS) as Tab[]).map((t) => [t, rows.filter((r) => inTab(r, t)).length])) as Record<Tab, number>
   return { rows, error, today, counts, pull: lastPull(), user: session.user }
 })

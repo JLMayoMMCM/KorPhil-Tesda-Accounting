@@ -1,8 +1,12 @@
 import { Badge } from "@/components/ui/badge"
-import { STATE_LABELS, type State } from "@/lib/ledger"
+import { ISSUES, type Issue } from "@/lib/ledger"
 
-const VARIANT = { overdue: "destructive", pending: "outline", paid: "secondary" } as const
-
-export function StatusBadge({ state, children }: { state: State; children?: React.ReactNode }) {
-  return <Badge variant={VARIANT[state]}>{children ?? STATE_LABELS[state]}</Badge>
+/** A voucher's review flags, or a quiet "OK" when it has none. */
+export function IssueBadges({ issues }: { issues: Issue[] }) {
+  if (!issues.length) return <span className="text-muted-foreground">OK</span>
+  return (
+    <span className="flex flex-wrap gap-1">
+      {issues.map((i) => <Badge key={i} variant="outline" className="border-destructive/40 text-destructive">{ISSUES[i]}</Badge>)}
+    </span>
+  )
 }
