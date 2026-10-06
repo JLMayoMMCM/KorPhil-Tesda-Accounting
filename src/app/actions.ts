@@ -38,7 +38,7 @@ export async function saveVoucher(sheetRow: number | null, form: FormData): Prom
   return { ok: true, message: `Saved ${fields.dv_no} to the sheet.` }
 }
 
-/** Mark many rows Verified (or back to For Review) in column K. */
+/** Mark many rows Verified (or back to For Review) in column L. */
 export async function setStatus(sheetRows: number[], verified: boolean): Promise<Result> {
   if (!sheetRows.length || !sheetRows.every((r) => Number.isInteger(r) && r >= FIRST_ROW)) return { ok: false, message: "Those rows aren't voucher rows." }
   const status = verified ? VERIFIED : FOR_REVIEW

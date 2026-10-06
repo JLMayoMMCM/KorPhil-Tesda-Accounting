@@ -2,13 +2,11 @@ import { ArrowRightIcon, ChartNoAxesColumnIcon, NotebookTextIcon } from "lucide-
 import type { Metadata } from "next"
 import Link from "next/link"
 
-import { Bar } from "@/components/bar"
 import { DonutChart, RankedBars, TrendChart, type Point } from "@/components/dashboard-charts"
 import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Popover, PopoverContent, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover"
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getData } from "@/lib/data"
 import { byIssue, group, isVerified, ISSUES, label, longMonth, median, monthLabel, months, monthsBack, peso, qs, total, yearThrough, type Voucher } from "@/lib/ledger"
 import { cn } from "@/lib/utils"
@@ -17,6 +15,11 @@ export const metadata: Metadata = { title: "Dashboard" }
 
 // Program slices step through the chart ramp so neighbours differ in lightness, not just hue.
 const RAMP = ["var(--chart-5)", "var(--chart-3)", "var(--chart-1)", "var(--chart-4)", "var(--chart-2)"]
+
+// Soft panels: rounded, hairline border instead of a ring, barely-there shadow.
+const PANEL = "rounded-2xl ring-0 border shadow-xs"
+// Second lap of the ramp, lightened, so up to ten slices stay distinguishable.
+const SLICES = [...RAMP.slice(0, 4), ...RAMP.slice(0, 4).map((c) => `color-mix(in oklab, ${c} 55%, var(--card))`), RAMP[4]]
 
 const vouchers = (n: number) => `${n.toLocaleString("en-US")} voucher${n === 1 ? "" : "s"}`
 const MONTH_NUMBERS = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"]
@@ -45,7 +48,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   const link = (changes: Record<string, string>) =>
     "/vouchers/" + qs(new URLSearchParams(), year === "all" ? changes : { ...changes, year })
 
-  const switcher = (
+  const switcher = (summary: React.ReactNode) => (
     <nav aria-label="Year" className="flex flex-wrap items-center gap-1 border-b pb-2 print:hidden">
       {[...years, "all"].map((y) => (
         <Button key={y} size="sm" variant={y === year ? "secondary" : "ghost"} aria-current={y === year ? "page" : undefined}
@@ -56,6 +59,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
       <span className="ml-auto text-sm text-muted-foreground">
         {year === "all" ? "Every voucher, dated or not" : `January – December ${year}, by DV date`}
       </span>
+      {summary}
     </nav>
   )
 
@@ -63,7 +67,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
     if (error) return null
     return (
       <div className="flex flex-col gap-6">
-        {everything.length > 0 && switcher}
+        {everything.length > 0 && switcher(null)}
         <Empty>
           <EmptyHeader>
             <EmptyMedia variant="icon"><ChartNoAxesColumnIcon /></EmptyMedia>
@@ -81,7 +85,6 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   const verified = rows.filter(isVerified)
   const pending = rows.filter((r) => !isVerified(r))
   const ready = pending.filter((r) => !r.issues.length), fixing = pending.filter((r) => r.issues.length)
-  const flagged = rows.filter((r) => r.issues.length) // verified rows only flag duplicate DV #s
 
   const thisMonth = today.slice(0, 7), lastMonth = monthsBack(thisMonth, 1)
   // The month comparison always reads the whole sheet: this month against last, whatever year is shown.
@@ -105,12 +108,22 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
     ...programs.slice(0, 4).map(([name, , amt], i) => ({ label: name, value: amt, color: RAMP[i] })),
     ...(programs.length > 4 ? [{ label: "Other", value: programs.slice(4).reduce((s, p) => s + p[2], 0), color: RAMP[4] }] : []),
   ]
+  const categories = group(rows, (r) => label(r, "category"))
+  const categoryData: Point[] = [
+    ...categories.slice(0, 4).map(([name, , amt], i) => ({ label: name, value: amt, color: RAMP[i] })),
+    ...(categories.length > 4 ? [{ label: "Other", value: categories.slice(4).reduce((s, p) => s + p[2], 0), color: RAMP[4] }] : []),
+  ]
   const payees = group(rows, (r) => r.payee.trim()).filter(([name]) => name)
   const top5 = new Set(payees.slice(0, 5).map(([name]) => name))
   const areas = group(rows, (r) => label(r, "trade_area")).map(([name, n, amt]) => {
     const list = rows.filter((r) => label(r, "trade_area") === name)
-    return { name, n, amt, done: list.filter(isVerified).length }
+    const done = list.filter(isVerified)
+    return { name, n, amt, done: done.length, doneAmt: total(done) }
   })
+  const areaData: Point[] = [
+    ...areas.slice(0, 8).map((a, i) => ({ label: a.name, tip: `${a.name} · ${vouchers(a.n)}`, value: a.amt, color: SLICES[i], href: link({ tab: "pending", area: a.name }) })),
+    ...(areas.length > 8 ? [{ label: "Other areas", value: areas.slice(8).reduce((t, a) => t + a.amt, 0), color: SLICES[8] }] : []),
+  ]
 
   // Summary sentences: each a fact the page also shows.
   const now = total(monthRows), before = total(lastRows), lastName = longMonth(lastMonth + "-01")
@@ -133,146 +146,127 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
     { name: "Category set", value: percent(rows.length - noCategory, rows.length), note: noCategory ? `${vouchers(noCategory)} blank` : "every voucher" },
   ]
 
+  const summary = (
+  <Popover>
+    <PopoverTrigger render={
+      <Button size="sm" variant="outline" className="print:hidden" />
+    }>
+      <NotebookTextIcon data-icon="inline-start" />Summary
+    </PopoverTrigger>
+    <PopoverContent side="bottom" align="end" sideOffset={8} className="w-[min(24rem,calc(100vw-2rem))] gap-3 p-4">
+      <PopoverHeader>
+        <PopoverTitle>Summary</PopoverTitle>
+      </PopoverHeader>
+      <div className="flex flex-col gap-2 leading-relaxed text-pretty">
+        <p>
+          <b className="tabular-nums">{peso(total(rows))}</b> disbursed across {vouchers(rows.length)} in {scope};
+          {" "}<b className="tabular-nums">{vouchers(verified.length)}</b> ({percent(verified.length, rows.length)}) are verified.
+        </p>
+        <p>
+          {pending.length
+            ? <>Of the {pending.length.toLocaleString("en-US")} for review, {ready.length.toLocaleString("en-US")} have no flags and can be verified now{fixing.length ? <>; {vouchers(fixing.length)} need fixing first</> : null}.</>
+            : <>Nothing is left for review.</>}
+        </p>
+        <p className="text-muted-foreground">
+          Vouchers dated {longMonth(today)} total <b className="text-foreground tabular-nums">{peso(now)}</b>{trend}.
+        </p>
+      </div>
+    </PopoverContent>
+  </Popover>
+  )
+
   const states: { key: string; name: string; note: string; list: Voucher[]; color: string; href: string; action: string }[] = [
-    { key: "verified", name: "Verified", note: "Signed off in column K", list: verified, color: "var(--primary)", href: link({ tab: "verified" }), action: "Open" },
+    { key: "verified", name: "Verified", note: "Signed off in column L", list: verified, color: "var(--primary)", href: link({ tab: "verified" }), action: "Open" },
     { key: "ready", name: "Ready to verify", note: "For review, no flags", list: ready, color: "var(--chart-1)", href: link({ tab: "pending", issue: "none" }), action: "Verify" },
     { key: "fixing", name: "Needs fixing", note: "For review, flagged gaps", list: fixing, color: "var(--destructive)", href: link({ tab: "pending", issue: "any" }), action: "Fix" },
   ]
 
   return (
-    <div className="@container/main flex w-full flex-col gap-6 pb-16 print:pb-0">
-      {switcher}
-      {/* KPI strip: ledger columns on hairlines (gap-px over the border colour), not cards. Wraps 2 → 3 → 6. */}
-      <dl aria-label="Key figures" className="grid grid-cols-2 gap-px overflow-hidden border-y bg-border break-inside-avoid @2xl/main:grid-cols-3 @6xl/main:grid-cols-6">
-        {kpis.map((k) => (
-          <div key={k.name} className="flex min-w-0 flex-col gap-0.5 bg-background px-4 py-3">
-            <dt className="truncate text-xs text-muted-foreground">{k.name}</dt>
-            <dd className="text-xl font-semibold tracking-tight tabular-nums">{k.value}</dd>
-            <dd className="text-xs text-muted-foreground tabular-nums">{k.note}</dd>
-          </div>
-        ))}
+    <div className="@container/main flex w-full flex-col gap-6 ">
+      {switcher(summary)}
+      {/* Key figures: one big number, five small tiles. */}
+      <dl aria-label="Key figures" className="grid gap-4 break-inside-avoid @5xl/main:grid-cols-12">
+        <div className={cn(PANEL, "flex flex-col justify-between gap-6 bg-card p-5 @5xl/main:col-span-4")}>
+          <dt className="text-sm text-muted-foreground">{kpis[0].name}</dt>
+          <dd className="text-5xl font-semibold tracking-tight tabular-nums">{kpis[0].value}</dd>
+          <dd><Pill text={kpis[0].note} /></dd>
+        </div>
+        <div className="grid grid-cols-2 gap-4 @3xl/main:grid-cols-6 @5xl/main:col-span-8">
+          {kpis.slice(1).map((k, i) => (
+            <div key={k.name} className={cn(PANEL, "flex flex-col gap-1 bg-card p-4 @3xl/main:col-span-2", i > 2 && "@3xl/main:col-span-3")}>
+              <dt className="text-xs text-muted-foreground">{k.name}</dt>
+              <dd className="text-2xl font-semibold tracking-tight tabular-nums">{k.value}</dd>
+              <dd><Pill text={k.note} /></dd>
+            </div>
+          ))}
+        </div>
       </dl>
-      {/* Floating summary: the dashboard in plain sentences, one click away and out of the charts' way. */}
-      <Popover>
-        <PopoverTrigger render={
-          <Button size="lg" className="fixed right-6 bottom-6 z-20 rounded-full shadow-lg print:hidden" />
-        }>
-          <NotebookTextIcon data-icon="inline-start" />Summary
-        </PopoverTrigger>
-        <PopoverContent side="top" align="end" sideOffset={8} className="w-[min(24rem,calc(100vw-2rem))] gap-3 p-4">
-          <PopoverHeader>
-            <PopoverTitle>Summary</PopoverTitle>
-          </PopoverHeader>
-          <div className="flex flex-col gap-2 leading-relaxed text-pretty">
-            <p>
-              <b className="tabular-nums">{peso(total(rows))}</b> disbursed across {vouchers(rows.length)} in {scope};
-              {" "}<b className="tabular-nums">{vouchers(verified.length)}</b> ({percent(verified.length, rows.length)}) are verified.
-            </p>
-            <p>
-              {pending.length
-                ? <>Of the {pending.length.toLocaleString("en-US")} for review, {ready.length.toLocaleString("en-US")} have no flags and can be verified now{fixing.length ? <>; {vouchers(fixing.length)} need fixing first</> : null}.</>
-                : <>Nothing is left for review.</>}
-            </p>
-            <p className="text-muted-foreground">
-              Vouchers dated {longMonth(today)} total <b className="text-foreground tabular-nums">{peso(now)}</b>{trend}.
-            </p>
-          </div>
-        </PopoverContent>
-      </Popover>
 
-      {/* Verification: one segmented bar, then the three states as a ledger strip with a way into each. */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Verification</CardTitle>
-          <CardDescription>
-            <span className="font-medium text-foreground tabular-nums">{verified.length.toLocaleString("en-US")}</span> of {vouchers(rows.length)} verified
-            {" · "}{peso(total(verified))} of {peso(total(rows))}
-          </CardDescription>
-          <CardAction className="text-3xl font-semibold tracking-tight tabular-nums">
-            {percent(verified.length, rows.length)}
-          </CardAction>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-5">
-          <div role="img" aria-label={states.map((s) => `${s.name}: ${s.list.length}`).join(", ")}
-            className="flex h-3 w-full gap-0.5 overflow-hidden rounded-full bg-muted">
-            {states.filter((s) => s.list.length).map((s) => (
-              <span key={s.key} className="h-full first:rounded-l-full last:rounded-r-full"
-                style={{ width: `max(4px, ${share(s.list.length, rows.length)}%)`, background: s.color }} />
-            ))}
-          </div>
-          <dl className="grid gap-y-4 @2xl/main:grid-cols-3 @2xl/main:divide-x">
-            {states.map((s) => (
-              <div key={s.key} className="flex items-start gap-3 @2xl/main:px-5 @2xl/main:first:pl-0 @2xl/main:last:pr-0">
-                <span aria-hidden="true" className="mt-1.5 size-2.5 shrink-0 rounded-[2px]" style={{ background: s.color }} />
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <dt className="text-sm font-medium">{s.name}</dt>
-                  <dd className="text-2xl font-semibold tabular-nums">{s.list.length.toLocaleString("en-US")}</dd>
-                  <dd className="text-xs text-muted-foreground tabular-nums">{peso(total(s.list))} · {s.note}</dd>
-                </div>
-                {s.list.length > 0 && (
-                  <Button variant="ghost" size="sm" className="print:hidden" render={<Link href={s.href} />} nativeButton={false}
-                    aria-label={`${s.action}: ${s.name}`}>
-                    {s.action}<ArrowRightIcon data-icon="inline-end" />
-                  </Button>
-                )}
+      <div className="grid gap-4 @3xl/main:grid-cols-2 @5xl/main:grid-cols-12">
+        {/* Verification: donut + the three states with a way into each; what blocks verification explains "Needs fixing". */}
+        <Card className={cn(PANEL, "break-inside-avoid @5xl/main:col-span-5")}>
+          <CardHeader>
+            <CardTitle>Verification</CardTitle>
+            <CardDescription>
+              <span className="font-medium text-foreground tabular-nums">{verified.length.toLocaleString("en-US")}</span> of {vouchers(rows.length)} verified
+              {" · "}{peso(total(verified))} of {peso(total(rows))}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-1 flex-col gap-5">
+            <div className="grid items-center gap-4 @md:grid-cols-[12rem_1fr]">
+              <DonutChart caption="Vouchers by verification state" legend={false} unit="voucher"
+                center={{ label: "Verified", value: percent(verified.length, rows.length) }}
+                data={states.map((s) => ({ label: s.name, value: s.list.length, color: s.color }))} />
+              <dl className="flex flex-col gap-3">
+                {states.map((s) => (
+                  <div key={s.key} className="flex items-start gap-3">
+                    <span aria-hidden="true" className="mt-1.5 size-2.5 shrink-0 rounded-[2px]" style={{ background: s.color }} />
+                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <dt className="text-sm font-medium">{s.name}</dt>
+                      <dd className="text-xl font-semibold tabular-nums">{s.list.length.toLocaleString("en-US")}</dd>
+                      <dd className="text-xs text-muted-foreground tabular-nums">{peso(total(s.list))} · {s.note}</dd>
+                    </div>
+                    {s.list.length > 0 && (
+                      <Button variant="ghost" size="sm" className="print:hidden" render={<Link href={s.href} />} nativeButton={false}
+                        aria-label={`${s.action}: ${s.name}`}>
+                        {s.action}<ArrowRightIcon data-icon="inline-end" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </dl>
+            </div>
+            <div className="mt-auto flex flex-col gap-2 border-t pt-4">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-medium">What blocks verification</h3>
+                <Button variant="ghost" size="sm" className="print:hidden" render={<Link href={link({ tab: "review" })} />} nativeButton={false}>
+                  Open review list<ArrowRightIcon data-icon="inline-end" />
+                </Button>
               </div>
-            ))}
-          </dl>
-        </CardContent>
-      </Card>
+              {reviewData.length ? <RankedBars caption="Amount by review check" data={reviewData} />
+                : <p className="text-sm text-muted-foreground">Every voucher passes the review checks.</p>}
+            </div>
+          </CardContent>
+        </Card>
 
-      <ChartCard title="Disbursed by month" description={`Amount by DV date, ${year === "all" ? "every month" : `January – December ${year}`} · verified under for review`}>
-        <TrendChart key={year} data={monthly} />
-      </ChartCard>
-
-      <div className="grid gap-4 @4xl/main:grid-cols-2">
-        <ChartCard title="What blocks verification" description={`${vouchers(flagged.length)} flagged · click a bar to open them`} href={link({ tab: "review" })} action="Open review list">
-          {reviewData.length ? <RankedBars caption="Amount by review check" data={reviewData} />
-            : <p className="text-sm text-muted-foreground">Every voucher passes the review checks.</p>}
+        <ChartCard title="Disbursed by month" description={`Amount by DV date, ${year === "all" ? "every month" : `January – December ${year}`} · verified under for review`}
+          className="@5xl/main:col-span-7">
+          <TrendChart key={year} data={monthly} />
         </ChartCard>
 
-        <ChartCard title="Verification by trade area" description="Share of each area's vouchers verified, largest amount first" href="/areas/" action="Open trade areas">
-          <Table className="text-sm">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Trade area</TableHead>
-                <TableHead className="w-[40%]"><span className="sr-only">Verified share</span></TableHead>
-                <TableHead className="text-right">Verified</TableHead>
-                <TableHead className="text-right">For review</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {areas.map((a) => (
-                <TableRow key={a.name}>
-                  <TableCell className="max-w-36 truncate font-medium" title={`${a.name} · ${peso(a.amt)}`}>{a.name}</TableCell>
-                  <TableCell><Bar pct={share(a.done, a.n)} /></TableCell>
-                  <TableCell className="text-right tabular-nums">{percent(a.done, a.n)}</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {a.n - a.done
-                      ? <Link className="underline-offset-4 hover:underline" href={link({ tab: "pending", area: a.name })}>{(a.n - a.done).toLocaleString("en-US")}</Link>
-                      : <span className="text-muted-foreground">—</span>}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-            <TableFooter>
-              <TableRow>
-                <TableHead scope="row" colSpan={2}>All areas</TableHead>
-                <TableCell className="text-right font-semibold tabular-nums">{percent(verified.length, rows.length)}</TableCell>
-                <TableCell className="text-right font-semibold tabular-nums">{pending.length.toLocaleString("en-US")}</TableCell>
-              </TableRow>
-            </TableFooter>
-          </Table>
-        </ChartCard>
-
-        <ChartCard title="By category" description={`Vouchers in ${scope}, largest first`}>
-          <RankedBars caption="Amount by category" data={group(rows, (r) => label(r, "category")).map(([name, , amt]) => ({ label: name, value: amt }))} />
-        </ChartCard>
-        <ChartCard title="Program split" description={`Diploma / ST / Assessment column, ${scope}, largest four`}>
+        <ChartCard title="Program split" description={`Diploma / ST / Assessment column, ${scope}, largest four`} className="@5xl/main:col-span-4">
           <DonutChart caption="Amount by program" data={programData} />
         </ChartCard>
-        <ChartCard title="Top payees" description={`Five largest of ${payees.length} · click a bar to find their vouchers`} className="@4xl/main:col-span-2">
+        <ChartCard title="By category" description={`Vouchers in ${scope}, largest four`} className="@5xl/main:col-span-4">
+          <DonutChart caption="Amount by category" data={categoryData} />
+        </ChartCard>
+        <ChartCard title="Top payees" description={`Five largest of ${payees.length} · click one to find their vouchers`} className="@3xl/main:col-span-2 @5xl/main:col-span-4">
           <RankedBars caption="Five largest payees by amount" data={payees.slice(0, 5).map(([name, , amt]) => ({ label: name, value: amt, href: link({ q: name }) }))} />
+        </ChartCard>
+
+        <ChartCard title="Disbursed by trade area" description="Share of the amount, largest eight areas · click one to open its pending vouchers"
+          href="/areas/" action="Open trade areas" className="@3xl/main:col-span-2 @5xl/main:col-span-12">
+          <DonutChart caption="Amount by trade area" data={areaData} />
         </ChartCard>
       </div>
     </div>
@@ -284,7 +278,7 @@ function ChartCard({ title, description, href, action = "View vouchers", classNa
   title: string; description: string; href?: string; action?: string; className?: string; children: React.ReactNode
 }) {
   return (
-    <Card className={cn("break-inside-avoid", className)}>
+    <Card className={cn(PANEL, "break-inside-avoid", className)}>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
@@ -296,7 +290,13 @@ function ChartCard({ title, description, href, action = "View vouchers", classNa
           </CardAction>
         )}
       </CardHeader>
-      <CardContent>{children}</CardContent>
+      <CardContent className="flex-1">{children}</CardContent>
     </Card>
   )
+}
+
+/** Small rounded pill for a figure's note; direction words ("up"/"down") tint it. */
+function Pill({ text }: { text: string }) {
+  const tone = text.startsWith("up ") ? "bg-primary/10 text-primary" : text.startsWith("down ") ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"
+  return <span className={cn("inline-block rounded-full px-2.5 py-0.5 text-xs tabular-nums", tone)}>{text}</span>
 }

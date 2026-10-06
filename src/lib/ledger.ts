@@ -17,7 +17,7 @@ export const FIELD_LABELS = {
 export type Field = keyof typeof FIELD_LABELS
 export const FIELDS = Object.keys(FIELD_LABELS) as Field[]
 
-// Column K: anything but "Verified" (blank included) counts as for review.
+// Column L: anything but "Verified" (blank included) counts as for review.
 export const VERIFIED = "Verified"
 export const FOR_REVIEW = "For Review"
 export const isVerified = (r: RawVoucher) => r.status.trim().toLowerCase() === VERIFIED.toLowerCase()

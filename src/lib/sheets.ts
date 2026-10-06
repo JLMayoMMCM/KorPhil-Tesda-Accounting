@@ -2,16 +2,16 @@ import "server-only"
 
 import { serialDate, type Field, type RawVoucher } from "@/lib/ledger"
 
-// Column layout of the EXP tab, A:K. Column B is an unlabelled spacer and is dropped.
-// Column K is the review status ("Verified" / "For Review").
+// Column layout of the EXP tab, A:L. Columns B and G are unlabelled spacers and are dropped.
+// Column L is the review status ("Verified" / "For Review").
 // Rows 1-4 are the header, a label row, the totals row and a blank row; data starts on row 5.
-// Columns M:O hold the dropdown lists for H:J and are never read or written.
+// Columns N:P hold the dropdown lists for H:J and are never read or written.
 const COLUMNS: (Field | null)[] = [
-  "dv_date", null, "dv_no", "payee", "particulars", "gross_amount",
+  "dv_date", null, "dv_no", "payee", "particulars", "gross_amount", null,
   "check_number", "trade_area", "diploma_st_assessment", "category", "status",
 ]
 export const FIRST_ROW = 5
-const LAST_COLUMN = "K"
+const LAST_COLUMN = "L"
 
 export const SHEET_ID = process.env.GOOGLE_SHEET_ID ?? ""
 export const SHEET_RANGE = process.env.GOOGLE_SHEET_RANGE || "EXP"
@@ -124,15 +124,15 @@ const valuesUrl = (range: string, query: string) =>
   `${API}/${SHEET_ID}/values/${encodeURIComponent(range)}${query}`
 const ordered = (fields: Record<Field, string>) => COLUMNS.map((name) => (name ? fields[name] ?? "" : ""))
 
-/** Set column K (status) on many rows in one request. */
+/** Set column L (status) on many rows in one request. */
 export function setStatuses(token: string | null, sheetRows: number[], status: string) {
   return write(token, `${API}/${SHEET_ID}/values:batchUpdate`, "POST", {
     valueInputOption: "USER_ENTERED",
-    data: sheetRows.map((r) => ({ range: `${SHEET_RANGE}!K${r}`, values: [[status]] })),
+    data: sheetRows.map((r) => ({ range: `${SHEET_RANGE}!L${r}`, values: [[status]] })),
   })
 }
 
-/** Overwrite one data row (A:K). */
+/** Overwrite one data row (A:L). */
 export function updateVoucherRow(token: string | null, sheetRow: number, fields: Record<Field, string>) {
   return write(token, valuesUrl(`${SHEET_RANGE}!A${sheetRow}:${LAST_COLUMN}${sheetRow}`, "?valueInputOption=USER_ENTERED"), "PUT",
     { values: [ordered(fields)] })
