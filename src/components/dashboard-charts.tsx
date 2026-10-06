@@ -6,9 +6,14 @@ import Link from "next/link"
 import { useId, useState } from "react"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Label, Pie, PieChart, XAxis, YAxis } from "recharts"
 
+import { ListFilterIcon } from "lucide-react"
 import { compact } from "@/components/charts"
+import { Button } from "@/components/ui/button"
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
+import { Checkbox } from "@/components/ui/checkbox"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { peso } from "@/lib/ledger"
 
 /** verified: the verified share of value (trend chart only). */
@@ -196,5 +201,85 @@ export function DonutChart({ data, caption, center, legend = true, unit }: {
       </ul>}
     </figure>
     </div>
+  )
+}
+
+const SLICES = ["var(--chart-5)", "var(--chart-3)", "var(--chart-1)", "var(--chart-4)"]
+
+/** Workspace rail card: the largest trade areas as a donut beside their legend, the rest as "Other"; the Filter menu picks which areas count. */
+export function AreaDonutCard({ data }: { data: Point[] }) {
+  const [off, setOff] = useState<Set<string>>(new Set())
+  const picked = data.filter((d) => !off.has(d.label))
+  const sum = picked.reduce((s, d) => s + d.value, 0)
+  const rest = picked.slice(SLICES.length)
+  const slices: Point[] = [
+    ...picked.slice(0, SLICES.length).map((d, i) => ({ ...d, color: SLICES[i] })),
+    ...(rest.length ? [{ label: `${rest.length} other${rest.length === 1 ? "" : "s"}`, value: rest.reduce((s, d) => s + d.value, 0), color: "var(--muted-foreground)" }] : []),
+  ]
+  const toggle = (name: string, on: boolean) => setOff((s) => {
+    const next = new Set(s)
+    if (on) next.delete(name)
+    else next.add(name)
+    return next
+  })
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>By trade area</CardTitle>
+        <CardAction>
+          <Popover>
+            <PopoverTrigger render={<Button variant="outline" size="sm" />}>
+              <ListFilterIcon data-icon="inline-start" />{off.size ? `${picked.length} of ${data.length}` : "All areas"}
+            </PopoverTrigger>
+            <PopoverContent align="end" className="flex max-h-80 w-60 flex-col gap-2 overflow-y-auto">
+              <div className="flex gap-3 text-sm">
+                <button type="button" className="underline-offset-4 hover:underline" onClick={() => setOff(new Set())}>Select all</button>
+                <button type="button" className="text-muted-foreground underline-offset-4 hover:underline" onClick={() => setOff(new Set(data.map((d) => d.label)))}>Clear</button>
+              </div>
+              {data.map((d) => (
+                <label key={d.label} className="flex items-center gap-2 text-sm">
+                  <Checkbox checked={!off.has(d.label)} onCheckedChange={(on) => toggle(d.label, on)} />
+                  <span className="min-w-0 flex-1 truncate">{d.label}</span>
+                  <span className="text-xs text-muted-foreground tabular-nums">{compact(d.value)}</span>
+                </label>
+              ))}
+            </PopoverContent>
+          </Popover>
+        </CardAction>
+      </CardHeader>
+      <CardContent>
+        {slices.length ? (
+          <figure className="flex items-center gap-4">
+            <figcaption className="sr-only">Amount by trade area</figcaption>
+            <ul className="flex min-w-0 flex-1 flex-col gap-3">
+              {slices.map((d) => (
+                <li key={d.label} className="flex items-center gap-2.5" title={`${d.label}: ${peso(d.value)}`}>
+                  <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-lg" style={{ background: `color-mix(in oklab, ${d.color} 15%, transparent)` }}>
+                    <span className="size-2.5 rounded-full" style={{ background: d.color }} />
+                  </span>
+                  <span className="flex min-w-0 flex-col leading-tight">
+                    {d.href
+                      ? <Link className="truncate text-xs text-muted-foreground hover:underline" href={d.href}>{d.label}</Link>
+                      : <span className="truncate text-xs text-muted-foreground">{d.label}</span>}
+                    <span className="font-bold tabular-nums">{compact(d.value)} <span className="text-xs font-normal text-muted-foreground">{sum ? Math.round((100 * d.value) / sum) : 0}%</span></span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <ChartContainer config={config} className="aspect-square w-36 shrink-0">
+              <PieChart>
+                <ChartTooltip cursor={false} content={tooltip} />
+                <Pie data={slices.filter((d) => d.value > 0)} dataKey="value" nameKey="label" innerRadius={48} outerRadius={68} strokeWidth={3} paddingAngle={1}>
+                  {slices.filter((d) => d.value > 0).map((d) => <Cell key={d.label} fill={d.color} stroke="var(--card)" />)}
+                  <Label content={({ viewBox }) => viewBox && "cx" in viewBox && (
+                    <text x={viewBox.cx} y={viewBox.cy} textAnchor="middle" dominantBaseline="middle" className="fill-foreground text-lg font-bold">{compact(sum)}</text>
+                  )} />
+                </Pie>
+              </PieChart>
+            </ChartContainer>
+          </figure>
+        ) : <p className="py-6 text-center text-sm text-muted-foreground">No trade areas selected.</p>}
+      </CardContent>
+    </Card>
   )
 }

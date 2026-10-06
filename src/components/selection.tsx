@@ -93,7 +93,7 @@ export function CollapsedBody({ header, count, children }: { header: React.React
   return (
     <tbody>
       <TableRow className="bg-muted/50 hover:bg-muted/50">
-        <th colSpan={7} scope="rowgroup" className="px-2 py-1.5 text-left font-medium">
+        <th colSpan={6} scope="rowgroup" className="px-2 py-1.5 text-left font-medium">
           <div className="flex items-center gap-2">
             {header}
             <Button variant="link" size="sm" className="ml-auto" aria-expanded={open} onClick={() => setOpen(!open)}>
