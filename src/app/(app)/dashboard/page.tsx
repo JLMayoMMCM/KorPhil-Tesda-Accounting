@@ -1,14 +1,14 @@
-import { ArrowRightIcon, ChartNoAxesColumnIcon, NotebookTextIcon } from "lucide-react"
+import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, ChartNoAxesColumnIcon, NotebookTextIcon } from "lucide-react"
 import type { Metadata } from "next"
 import Link from "next/link"
 
-import { DonutChart, RankedBars, TrendChart, type Point } from "@/components/dashboard-charts"
+import { AreaSummary, DonutChart, RankedBars, TrendChart, type AreaStat, type Day, type Point } from "@/components/dashboard-charts"
 import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Popover, PopoverContent, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover"
 import { getData } from "@/lib/data"
-import { byIssue, group, isVerified, ISSUES, label, longMonth, median, monthLabel, months, monthsBack, peso, qs, total, yearThrough, type Voucher } from "@/lib/ledger"
+import { byIssue, group, isVerified, ISSUES, label, longMonth, monthLabel, months, monthsBack, peso, qs, total, yearThrough, type Voucher } from "@/lib/ledger"
 import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = { title: "Dashboard" }
@@ -18,9 +18,6 @@ const RAMP = ["var(--chart-5)", "var(--chart-3)", "var(--chart-1)", "var(--chart
 
 // Soft panels: rounded, hairline border instead of a ring, barely-there shadow.
 const PANEL = "rounded-2xl ring-0 border shadow-xs"
-// Second lap of the ramp, lightened, so up to ten slices stay distinguishable.
-const SLICES = [...RAMP.slice(0, 4), ...RAMP.slice(0, 4).map((c) => `color-mix(in oklab, ${c} 55%, var(--card))`), RAMP[4]]
-
 const vouchers = (n: number) => `${n.toLocaleString("en-US")} voucher${n === 1 ? "" : "s"}`
 const MONTH_NUMBERS = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"]
 const share = (n: number, of: number) => (of ? (100 * n) / of : 0)
@@ -41,26 +38,41 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   const { rows: everything, error, today } = await getData()
   // Scope: one calendar year (Jan–Dec, default this year) or "all". Undated vouchers only show under All years.
   const years = [...new Set([today.slice(0, 4), ...months(everything).map((m) => m.slice(0, 4))])].sort().reverse()
-  const asked = (await searchParams).year
+  const { year: asked, month: askedMonth } = await searchParams
   const year = typeof asked === "string" && (asked === "all" || years.includes(asked)) ? asked : today.slice(0, 4)
+  // Month under comparison: the picked one, else the current month (December for a past year). All years reads the current month.
+  const mm = typeof askedMonth === "string" && MONTH_NUMBERS.includes(askedMonth) ? askedMonth : year === today.slice(0, 4) ? today.slice(5, 7) : "12"
+  const thisMonth = year === "all" ? today.slice(0, 7) : `${year}-${mm}`, lastMonth = monthsBack(thisMonth, 1)
   const rows = year === "all" ? everything : everything.filter((r) => r.month.startsWith(year + "-"))
   const scope = year === "all" ? "all years" : year
   const link = (changes: Record<string, string>) =>
     "/vouchers/" + qs(new URLSearchParams(), year === "all" ? changes : { ...changes, year })
 
   const switcher = (summary: React.ReactNode) => (
-    <nav aria-label="Year" className="flex flex-wrap items-center gap-1 border-b pb-2 print:hidden">
-      {[...years, "all"].map((y) => (
-        <Button key={y} size="sm" variant={y === year ? "secondary" : "ghost"} aria-current={y === year ? "page" : undefined}
-          render={<Link href={`/dashboard/?year=${y}`} />} nativeButton={false}>
-          {y === "all" ? "All years" : y}
-        </Button>
-      ))}
-      <span className="ml-auto text-sm text-muted-foreground">
-        {year === "all" ? "Every voucher, dated or not" : `January – December ${year}, by DV date`}
-      </span>
-      {summary}
-    </nav>
+    <div className="flex flex-col gap-1 border-b pb-2 print:hidden">
+      <nav aria-label="Year" className="flex flex-wrap items-center gap-1">
+        {[...years, "all"].map((y) => (
+          <Button key={y} size="sm" variant={y === year ? "secondary" : "ghost"} aria-current={y === year ? "page" : undefined}
+            render={<Link href={`/dashboard/?year=${y}`} />} nativeButton={false}>
+            {y === "all" ? "All years" : y}
+          </Button>
+        ))}
+        <span className="ml-auto text-sm text-muted-foreground">
+          {year === "all" ? "Every voucher, dated or not" : `January – December ${year}, by DV date`}
+        </span>
+        {summary}
+      </nav>
+      {year !== "all" && (
+        <nav aria-label="Month" className="flex flex-wrap items-center gap-1">
+          {MONTH_NUMBERS.map((m) => (
+            <Button key={m} size="sm" variant={m === mm ? "secondary" : "ghost"} aria-current={m === mm ? "page" : undefined}
+              render={<Link href={`/dashboard/?year=${year}&month=${m}`} />} nativeButton={false}>
+              {monthLabel(`${year}-${m}`).slice(0, 3)}
+            </Button>
+          ))}
+        </nav>
+      )}
+    </div>
   )
 
   if (!rows.length) {
@@ -86,43 +98,47 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   const pending = rows.filter((r) => !isVerified(r))
   const ready = pending.filter((r) => !r.issues.length), fixing = pending.filter((r) => r.issues.length)
 
-  const thisMonth = today.slice(0, 7), lastMonth = monthsBack(thisMonth, 1)
-  // The month comparison always reads the whole sheet: this month against last, whatever year is shown.
+  // The month comparison reads the whole sheet, so January compares against the December before it.
   const monthRows = everything.filter((r) => r.month === thisMonth), lastRows = everything.filter((r) => r.month === lastMonth)
 
-  // A year shows its full January–December cycle. All years: every month from the first DV to now (at least 12).
-  const dvMonths = months(rows), newest = dvMonths[0] > thisMonth ? dvMonths[0] : thisMonth, oldest = dvMonths.at(-1) ?? newest
-  const span = Math.max(12, (+newest.slice(0, 4) - +oldest.slice(0, 4)) * 12 + (+newest.slice(5) - +oldest.slice(5)) + 1)
-  const cycle = year === "all"
-    ? Array.from({ length: span }, (_, i) => monthsBack(newest, span - 1 - i))
-    : MONTH_NUMBERS.map((m) => `${year}-${m}`)
-  const monthly: Point[] = cycle.map((m) => {
-    const list = rows.filter((r) => r.month === m)
-    return { id: m, label: monthLabel(m).slice(0, 3), tip: monthLabel(m), value: total(list), verified: total(list.filter(isVerified)) }
-  })
+  // The summary chart gets one entry per DV date and groups them itself. A year spans January 1 – December 31;
+  // All years runs from the first DV month to the latest (at least 12 months).
+  const dvMonths = months(rows), newest = dvMonths[0] > thisMonth ? dvMonths[0] : thisMonth
+  const oldest = [dvMonths.at(-1) ?? newest, monthsBack(newest, 11)].sort()[0]
+  const from = year === "all" ? `${oldest}-01` : `${year}-01-01`
+  const to = year === "all" ? new Date(Date.parse(`${monthsBack(newest, -1)}-01`) - 864e5).toISOString().slice(0, 10) : `${year}-12-31`
+  const byDay = new Map<string, Day>()
+  for (const r of rows) {
+    if (!r.dv) continue
+    const d = byDay.get(r.dv) ?? { date: r.dv, value: 0, verified: 0 }
+    d.value += r.amount
+    if (isVerified(r)) d.verified += r.amount
+    byDay.set(r.dv, d)
+  }
   const reviewData: Point[] = byIssue(rows).map(([i, list]) => ({
     label: ISSUES[i], tip: `${ISSUES[i]} · ${vouchers(list.length)}`, value: total(list), href: link({ issue: i }), color: "var(--destructive)",
   }))
-  const programs = group(rows, (r) => label(r, "diploma_st_assessment"))
-  const programData: Point[] = [
-    ...programs.slice(0, 4).map(([name, , amt], i) => ({ label: name, value: amt, color: RAMP[i] })),
-    ...(programs.length > 4 ? [{ label: "Other", value: programs.slice(4).reduce((s, p) => s + p[2], 0), color: RAMP[4] }] : []),
-  ]
-  const categories = group(rows, (r) => label(r, "category"))
-  const categoryData: Point[] = [
-    ...categories.slice(0, 4).map(([name, , amt], i) => ({ label: name, value: amt, color: RAMP[i] })),
-    ...(categories.length > 4 ? [{ label: "Other", value: categories.slice(4).reduce((s, p) => s + p[2], 0), color: RAMP[4] }] : []),
-  ]
-  const payees = group(rows, (r) => r.payee.trim()).filter(([name]) => name)
-  const top5 = new Set(payees.slice(0, 5).map(([name]) => name))
   const areas = group(rows, (r) => label(r, "trade_area")).map(([name, n, amt]) => {
     const list = rows.filter((r) => label(r, "trade_area") === name)
     const done = list.filter(isVerified)
     return { name, n, amt, done: done.length, doneAmt: total(done) }
   })
-  const areaData: Point[] = [
-    ...areas.slice(0, 8).map((a, i) => ({ label: a.name, tip: `${a.name} · ${vouchers(a.n)}`, value: a.amt, color: SLICES[i], href: link({ tab: "pending", area: a.name }) })),
-    ...(areas.length > 8 ? [{ label: "Other areas", value: areas.slice(8).reduce((t, a) => t + a.amt, 0), color: SLICES[8] }] : []),
+  const topFive = (list: Voucher[], by: (r: Voucher) => string, href?: (name: string) => string): Point[] =>
+    group(list, by).filter(([name]) => name).slice(0, 5).map(([name, , amt]) => ({ label: name, value: amt, href: href?.(name) }))
+  const statFor = (name: string, list: Voucher[], href: string): AreaStat => {
+    const done = list.filter(isVerified), flagged = list.filter((r) => r.issues.length && !isVerified(r))
+    const amount = total(list)
+    return {
+      name, href, vouchers: list.length, amount, verifiedCount: done.length, verifiedAmount: total(done),
+      pendingCount: list.length - done.length, flagged: flagged.length, average: list.length ? Math.round(amount / list.length) : 0,
+      payees: topFive(list, (r) => r.payee.trim(), (n) => link({ q: n })),
+      categories: topFive(list, (r) => label(r, "category")),
+      programs: group(list, (r) => label(r, "diploma_st_assessment")).slice(0, 4).map(([n, , amt], i) => ({ label: n, value: amt, color: RAMP[i] })),
+    }
+  }
+  const areaStats: AreaStat[] = [
+    statFor("All trade areas", rows, link({ tab: "pending" })),
+    ...areas.map((a) => statFor(a.name, rows.filter((r) => label(r, "trade_area") === a.name), link({ tab: "pending", area: a.name }))),
   ]
 
   // Summary sentences: each a fact the page also shows.
@@ -135,16 +151,16 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   const y = Number(year), through = year === today.slice(0, 4) ? today.slice(5, 7) : "12"
   const against = through === "12" ? String(y - 1) : `Jan–${monthLabel(`${y}-${through}`).slice(0, 3)} ${y - 1}`
   const yearChange = year === "all" ? null : change(total(yearThrough(everything, y, through)), total(yearThrough(everything, y - 1, through)), against)
-  const withCheck = rows.filter((r) => r.check_number.trim()).length
-  const noCategory = rows.filter((r) => !r.category.trim()).length
-  const kpis: { name: string; value: string; note: string }[] = [
-    { name: `Disbursed, ${scope}`, value: peso(sum), note: yearChange ?? vouchers(rows.length) },
-    { name: `Dated ${longMonth(today)}`, value: peso(now), note: monthChange ?? (now ? `nothing dated ${lastName}` : `nothing dated yet`) },
-    { name: "Average voucher", value: peso(Math.round(sum / rows.length)), note: `median ${peso(median(rows))}` },
-    { name: "With check #", value: percent(withCheck, rows.length), note: `${vouchers(rows.length - withCheck)} without` },
-    { name: "Top 5 payees", value: percent(total(rows.filter((r) => top5.has(r.payee.trim()))), sum), note: `of pesos, across ${payees.length.toLocaleString("en-US")} payees` },
-    { name: "Category set", value: percent(rows.length - noCategory, rows.length), note: noCategory ? `${vouchers(noCategory)} blank` : "every voucher" },
-  ]
+  const monthName = `${longMonth(thisMonth + "-01")} ${thisMonth.slice(0, 4)}`
+  // Twelve months ending at the picked one, drawn as a 160x56 line beside its figure.
+  const spark = Array.from({ length: 12 }, (_, i) => total(everything.filter((r) => r.month === monthsBack(thisMonth, 11 - i))))
+  const peak = Math.max(1, ...spark)
+  const line = spark.map((v, i) => `${(i * 160) / 11},${52 - (46 * v) / peak}`)
+  const delta = before ? Math.round((100 * (now - before)) / before) : null
+  // The usual chart convention for the month card: green up, red down.
+  const tone = !delta ? "var(--muted-foreground)" : delta > 0 ? "#16a34a" : "#dc2626"
+  const verdict = delta === null ? `Nothing dated ${lastName} to compare`
+    : delta ? `${delta > 0 ? "Up" : "Down"} ${Math.abs(delta).toLocaleString("en-US")}% compared to ${lastName}` : `Same as ${lastName}`
 
   const summary = (
   <Popover>
@@ -168,7 +184,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
             : <>Nothing is left for review.</>}
         </p>
         <p className="text-muted-foreground">
-          Vouchers dated {longMonth(today)} total <b className="text-foreground tabular-nums">{peso(now)}</b>{trend}.
+          Vouchers dated {monthName} total <b className="text-foreground tabular-nums">{peso(now)}</b>{trend}.
         </p>
       </div>
     </PopoverContent>
@@ -184,21 +200,41 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   return (
     <div className="@container/main flex w-full flex-col gap-6 ">
       {switcher(summary)}
-      {/* Key figures: one big number, five small tiles. */}
-      <dl aria-label="Key figures" className="grid gap-4 break-inside-avoid @5xl/main:grid-cols-12">
-        <div className={cn(PANEL, "flex flex-col justify-between gap-6 bg-card p-5 @5xl/main:col-span-4")}>
-          <dt className="text-sm text-muted-foreground">{kpis[0].name}</dt>
-          <dd className="text-5xl font-semibold tracking-tight tabular-nums">{kpis[0].value}</dd>
-          <dd><Pill text={kpis[0].note} /></dd>
+      {/* Key figures: this scope's total, and the picked month against the one before it. */}
+      <dl aria-label="Key figures" className="grid gap-4 break-inside-avoid @3xl/main:grid-cols-2">
+        <div className={cn(PANEL, "flex flex-col justify-between gap-4 bg-card p-5")}>
+          <dt className="text-sm text-muted-foreground">Disbursed, {scope}</dt>
+          <dd className="text-5xl font-semibold tracking-tight tabular-nums">{peso(sum)}</dd>
+          <dd><Pill text={yearChange ?? vouchers(rows.length)} /></dd>
         </div>
-        <div className="grid grid-cols-2 gap-4 @3xl/main:grid-cols-6 @5xl/main:col-span-8">
-          {kpis.slice(1).map((k, i) => (
-            <div key={k.name} className={cn(PANEL, "flex flex-col gap-1 bg-card p-4 @3xl/main:col-span-2", i > 2 && "@3xl/main:col-span-3")}>
-              <dt className="text-xs text-muted-foreground">{k.name}</dt>
-              <dd className="text-2xl font-semibold tracking-tight tabular-nums">{k.value}</dd>
-              <dd><Pill text={k.note} /></dd>
-            </div>
-          ))}
+        <div className={cn(PANEL, "flex flex-col justify-between gap-4 bg-card p-5")}>
+          <dt className="text-sm text-muted-foreground">{monthName}</dt>
+          <dd className="flex flex-wrap items-end justify-between gap-4">
+            <span className="flex flex-wrap items-baseline gap-x-2.5">
+              <span className="text-4xl font-semibold tracking-tight tabular-nums">{peso(now)}</span>
+              {delta !== null && (
+                <span title={verdict} className="inline-flex items-center gap-0.5 self-center text-sm font-medium tabular-nums" style={{ color: tone }}>
+                  {delta > 0 ? <ArrowUpIcon aria-hidden="true" className="size-3.5" /> : delta < 0 ? <ArrowDownIcon aria-hidden="true" className="size-3.5" /> : null}
+                  {delta > 0 ? "+" : delta < 0 ? "−" : ""}{Math.abs(delta).toLocaleString("en-US")}%
+                  <span className="sr-only">, {verdict}</span>
+                </span>
+              )}
+            </span>
+            <svg aria-hidden="true" viewBox="0 0 160 56" className="h-14 w-40 shrink-0 overflow-visible" style={{ color: tone }}>
+              <defs>
+                <linearGradient id="spark-fill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="currentColor" stopOpacity={0.35} />
+                  <stop offset="100%" stopColor="currentColor" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <polygon points={`0,56 ${line.join(" ")} 160,56`} fill="url(#spark-fill)" />
+              <polyline points={line.join(" ")} fill="none" stroke="currentColor" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+              <circle cx={160} cy={52 - (46 * now) / peak} r={3} fill="currentColor" />
+            </svg>
+          </dd>
+          <dd className="text-sm text-muted-foreground">
+            Disbursed in {lastName}: <b className="text-base font-semibold text-foreground tabular-nums">{peso(before)}</b>
+          </dd>
         </div>
       </dl>
 
@@ -249,24 +285,13 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
           </CardContent>
         </Card>
 
-        <ChartCard title="Disbursed by month" description={`Amount by DV date, ${year === "all" ? "every month" : `January – December ${year}`} · verified under for review`}
+        <ChartCard title="Disbursed summary" description={`Amount by DV date, ${year === "all" ? "all years" : year} · by day, week or month, or any date range · verified under for review`}
           className="@5xl/main:col-span-7">
-          <TrendChart key={year} data={monthly} />
+          <TrendChart key={year} days={[...byDay.values()]} from={from} to={to} />
         </ChartCard>
 
-        <ChartCard title="Program split" description={`Diploma / ST / Assessment column, ${scope}, largest four`} className="@5xl/main:col-span-4">
-          <DonutChart caption="Amount by program" data={programData} />
-        </ChartCard>
-        <ChartCard title="By category" description={`Vouchers in ${scope}, largest four`} className="@5xl/main:col-span-4">
-          <DonutChart caption="Amount by category" data={categoryData} />
-        </ChartCard>
-        <ChartCard title="Top payees" description={`Five largest of ${payees.length} · click one to find their vouchers`} className="@3xl/main:col-span-2 @5xl/main:col-span-4">
-          <RankedBars caption="Five largest payees by amount" data={payees.slice(0, 5).map(([name, , amt]) => ({ label: name, value: amt, href: link({ q: name }) }))} />
-        </ChartCard>
-
-        <ChartCard title="Disbursed by trade area" description="Share of the amount, largest eight areas · click one to open its pending vouchers"
-          href="/areas/" action="Open trade areas" className="@3xl/main:col-span-2 @5xl/main:col-span-12">
-          <DonutChart caption="Amount by trade area" data={areaData} />
+        <ChartCard title="Summary per trade area" description="Pick an area to see its figures, payees, categories and programs" className="@3xl/main:col-span-2 @5xl/main:col-span-12">
+          <AreaSummary stats={areaStats} />
         </ChartCard>
       </div>
     </div>

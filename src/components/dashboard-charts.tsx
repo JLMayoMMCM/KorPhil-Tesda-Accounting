@@ -6,15 +6,16 @@ import Link from "next/link"
 import { useId, useState } from "react"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Label, Pie, PieChart, XAxis, YAxis } from "recharts"
 
-import { ListFilterIcon } from "lucide-react"
+import { CalendarIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ListFilterIcon } from "lucide-react"
 import { compact } from "@/components/charts"
 import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { Checkbox } from "@/components/ui/checkbox"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { peso } from "@/lib/ledger"
+import { longDate, longMonth, monthLabel, monthsBack, peso, shortDate } from "@/lib/ledger"
+import { cn } from "@/lib/utils"
 
 /** verified: the verified share of value (trend chart only). */
 export type Point = { id?: string; label: string; value: number; verified?: number; tip?: string; color?: string; href?: string }
@@ -50,51 +51,178 @@ function Figures({ caption, data }: { caption: string; data: Point[] }) {
   )
 }
 
-const VIEWS = { "12": "Last 12 months", "6": "Last 6 months", "3": "Last 3 months", month: "Single month", quarterly: "Quarter", custom: "Custom range" } as const
-type View = keyof typeof VIEWS
+/** One DV date's amounts, in centavos. */
+export type Day = { date: string; value: number; verified: number }
 
-/** Quarter (1-4) of a month id "2026-09". */
-const quarterOf = (id = "") => Math.ceil(Number(id.slice(5, 7)) / 3)
+const UNITS = {
+  day: { label: "By day", note: "One point for each DV date" },
+  week: { label: "By week", note: "Monday to Sunday" },
+  month: { label: "By month", note: "Calendar months" },
+  quarter: { label: "By quarter", note: "January – March, April – June, and so on" },
+} as const
+type Unit = keyof typeof UNITS
 
-/** Monthly amounts as stacked areas (verified under for review): last 3/6/12 months up to a chosen month, the months of one quarter, or any custom month range. */
-export function TrendChart({ data }: { data: Point[] }) {
-  const [view, setView] = useState<View>("12")
-  const [from, setFrom] = useState(Math.max(0, data.length - 12))
-  const [end, setEnd] = useState(data.length - 1)
-  const latest = data.at(-1)?.id ?? ""
-  const [year, setYear] = useState(latest.slice(0, 4))
-  const [quarter, setQuarter] = useState(quarterOf(latest))
-  const years = [...new Set(data.map((d) => d.id?.slice(0, 4) ?? ""))].reverse()
-  const shown = view === "quarterly" ? data.filter((d) => d.id?.startsWith(year) && quarterOf(d.id) === quarter)
-    : view === "custom" ? data.slice(Math.min(from, end), Math.max(from, end) + 1)
-    : view === "month" ? data.slice(end, end + 1)
-    : data.slice(Math.max(0, end - Number(view) + 1), end + 1)
-  const stacked = shown.map((d) => ({ ...d, verified: d.verified ?? 0, pending: d.value - (d.verified ?? 0) }))
-  const fill = useId().replace(/:/g, "")
-  const soft = "[&_select]:rounded-full [&_select]:border-transparent [&_select]:bg-muted [&_select]:pl-3 [&_select]:font-medium [&_select]:text-foreground"
-  const month = (name: string, value: number, set: (i: number) => void) => (
-    <NativeSelect size="sm" className={soft} aria-label={name} value={value} onChange={(e) => set(Number(e.target.value))}>
-      {data.map((d, i) => <NativeSelectOption key={d.id} value={i}>{d.tip}</NativeSelectOption>).reverse()}
-    </NativeSelect>
+const addDays = (iso: string, n: number) => new Date(Date.parse(iso) + n * 864e5).toISOString().slice(0, 10)
+const quarterOf = (iso: string) => Math.ceil(Number(iso.slice(5, 7)) / 3)
+/** The bucket a date falls in: itself, its week's Monday, its month "2026-09" or its quarter "2026-Q3". */
+const bucket = (iso: string, unit: Unit) =>
+  unit === "quarter" ? `${iso.slice(0, 4)}-Q${quarterOf(iso)}` : unit === "month" ? iso.slice(0, 7)
+    : unit === "week" ? addDays(iso, -((new Date(iso).getUTCDay() + 6) % 7)) : iso
+/** First and last date of quarter q (1-4) of a year. */
+const quarter = (year: string, q: number): [string, string] =>
+  [`${year}-${String(q * 3 - 2).padStart(2, "0")}-01`, `${year}-${["03-31", "06-30", "09-30", "12-31"][q - 1]}`]
+const sorted = (x: string, y: string): [string, string] => (x <= y ? [x, y] : [y, x])
+const monthTitle = (m: string) => `${longMonth(m + "-01")} ${m.slice(0, 4)}`
+/** The dates of month "2026-09", led by blanks so the 1st lands under its weekday (Monday first). */
+const monthGrid = (m: string): (string | null)[] => [
+  ...Array<null>((new Date(m + "-01").getUTCDay() + 6) % 7).fill(null),
+  ...Array.from({ length: new Date(Date.UTC(+m.slice(0, 4), +m.slice(5, 7), 0)).getUTCDate() }, (_, i) => `${m}-${String(i + 1).padStart(2, "0")}`),
+]
+
+/** Two months of days for picking a date range: press and drag across days, or click a start then an end. Dots mark dates with vouchers. */
+function RangeCalendar({ first, last, range, marked, onPick }: {
+  first: string; last: string; range: [string, string] | null; marked: Set<string>; onPick: (from: string, to: string) => void
+}) {
+  const [view, setView] = useState((range?.[0] ?? [...marked].sort().at(-1) ?? last).slice(0, 7))
+  const [drag, setDrag] = useState<[string, string] | null>(null)
+  const [anchor, setAnchor] = useState<string | null>(null)
+  const picked = drag ? sorted(...drag) : range
+  const year = view.slice(0, 4)
+  const clamp = ([x, y]: [string, string]): [string, string] => [x < first ? first : x, y > last ? last : y]
+  const dayAt = (e: React.PointerEvent) =>
+    (document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-day]") as HTMLElement | null)?.dataset.day
+  // A click (or Enter) sets the start; the next one on another day closes the range.
+  const tap = (d: string) => {
+    if (anchor && anchor !== d) { onPick(...sorted(anchor, d)); setAnchor(null) }
+    else { onPick(d, d); setAnchor(d) }
+  }
+  const length = picked ? Math.round((Date.parse(picked[1]) - Date.parse(picked[0])) / 864e5) + 1 : 0
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="relative flex touch-none gap-5 select-none"
+        onPointerDown={(e) => { const d = dayAt(e); if (d) setDrag([d, d]) }}
+        onPointerMove={(e) => {
+          if (!drag) return
+          if (!e.buttons) return setDrag(null)
+          const d = dayAt(e)
+          if (d && d !== drag[1]) setDrag([drag[0], d])
+        }}
+        onPointerUp={() => {
+          if (drag && drag[0] !== drag[1]) { onPick(...sorted(...drag)); setAnchor(null) }
+          setDrag(null)
+        }}>
+        <Button variant="ghost" size="icon-sm" className="absolute top-0 left-0" aria-label="Earlier months"
+          disabled={view <= first.slice(0, 7)} onClick={() => setView(monthsBack(view, 1))}><ChevronLeftIcon /></Button>
+        <Button variant="ghost" size="icon-sm" className="absolute top-0 right-0" aria-label="Later months"
+          disabled={view >= last.slice(0, 7)} onClick={() => setView(monthsBack(view, -1))}><ChevronRightIcon /></Button>
+        {[view, monthsBack(view, -1)].map((m, col) => (
+          <div key={m} className={cn("flex flex-col gap-2", col && "hidden sm:flex")}>
+            <div className="flex h-7 items-center justify-center text-sm font-medium text-foreground">{monthTitle(m)}</div>
+            <div role="group" aria-label={monthTitle(m)} className="grid grid-cols-7 gap-y-0.5">
+              {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((w) => (
+                <span key={w} aria-hidden="true" className="grid size-9 place-items-center text-xs text-muted-foreground">{w}</span>
+              ))}
+              {monthGrid(m).map((d, i) => {
+                if (!d) return <span key={i} />
+                const off = d < first || d > last
+                const inside = !!picked && d >= picked[0] && d <= picked[1]
+                const edge = !!picked && (d === picked[0] || d === picked[1])
+                return (
+                  <span key={d} className={cn("size-9", inside && "bg-primary/10",
+                    (d === picked?.[0] || i % 7 === 0) && "rounded-l-md", (d === picked?.[1] || i % 7 === 6) && "rounded-r-md")}>
+                    <button type="button" disabled={off} data-day={off ? undefined : d} aria-label={longDate(d)} aria-pressed={inside}
+                      onClick={() => tap(d)}
+                      className={cn("relative grid size-9 place-items-center rounded-md text-sm tabular-nums outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:text-muted-foreground/40",
+                        edge ? "bg-primary font-semibold text-primary-foreground" : inside ? "text-foreground" : "text-foreground hover:bg-muted")}>
+                      {Number(d.slice(8))}
+                      {marked.has(d) && <span aria-hidden="true" className={cn("absolute bottom-1 size-1 rounded-full", edge ? "bg-primary-foreground" : "bg-primary")} />}
+                    </button>
+                  </span>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-1 border-t pt-3">
+        <span className="mr-1 text-xs text-muted-foreground tabular-nums">{year}</span>
+        {[1, 2, 3, 4].map((q) => {
+          const [x, y] = clamp(quarter(year, q))
+          return (
+            <Button key={q} size="sm" variant={range?.[0] === x && range[1] === y ? "secondary" : "ghost"} disabled={x > y}
+              onClick={() => { onPick(x, y); setAnchor(null); setView(x.slice(0, 7)) }}>Q{q}</Button>
+          )
+        })}
+        <Button size="sm" variant="ghost" className="ml-auto" disabled={!range} onClick={() => { onPick(first, last); setAnchor(null) }}>Whole period</Button>
+      </div>
+      <p aria-live="polite" className="text-xs text-muted-foreground tabular-nums">
+        {anchor && !drag ? `Starts ${shortDate(anchor)}. Click the last day, or drag across days.`
+          : picked ? `${shortDate(picked[0])} – ${shortDate(picked[1])}, ${picked[1].slice(0, 4)} · ${length} day${length === 1 ? "" : "s"}`
+          : "Drag across days, or click a first and a last day."}
+      </p>
+    </div>
   )
+}
+
+/** Disbursed amounts as stacked areas (verified under for review), by day, week, month or quarter, over the whole period or any date range inside it. */
+export function TrendChart({ days, from: first, to: last }: { days: Day[]; from: string; to: string }) {
+  const [unit, setUnit] = useState<Unit>("month")
+  const [[a, b], setRange] = useState<[string, string]>([first, last])
+  const points = new Map<string, Point & { verified: number }>()
+  for (let d = a; d <= b; d = addDays(d, 1)) {
+    const id = bucket(d, unit)
+    if (points.has(id)) continue
+    const start = id < a ? a : id, stop = addDays(id, 6) > b ? b : addDays(id, 6)
+    points.set(id, {
+      id, value: 0, verified: 0,
+      label: unit === "quarter" ? id.slice(5) : unit === "month" ? monthLabel(id).slice(0, 3) : shortDate(unit === "week" ? start : id),
+      tip: unit === "quarter" ? `${id.slice(5)} ${id.slice(0, 4)}` : unit === "month" ? monthLabel(id)
+        : unit === "week" ? `${shortDate(start)} – ${shortDate(stop)}, ${stop.slice(0, 4)}` : longDate(id),
+    })
+  }
+  for (const d of days) {
+    const p = d.date >= a && d.date <= b ? points.get(bucket(d.date, unit)) : undefined
+    if (p) { p.value += d.value; p.verified += d.verified }
+  }
+  const shown = [...points.values()]
+  const stacked = shown.map((d) => ({ ...d, pending: d.value - d.verified }))
+  const custom = a !== first || b !== last
+  const [qa, qb] = quarter(a.slice(0, 4), quarterOf(a))
+  const isQuarter = custom && a === (qa < first ? first : qa) && b === (qb > last ? last : qb)
+  const fill = useId().replace(/:/g, "")
   return (
     <div className="flex h-full flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground print:hidden">
-        <NativeSelect size="sm" className={soft} aria-label="View" value={view} onChange={(e) => setView(e.target.value as View)}>
-          {Object.entries(VIEWS).map(([k, text]) => <NativeSelectOption key={k} value={k}>{text}</NativeSelectOption>)}
-        </NativeSelect>
-        {view === "custom"
-          ? <>from {month("First month shown", from, setFrom)} to {month("Last month shown", end, setEnd)}</>
-          : view === "quarterly" ? <>
-            <NativeSelect size="sm" className={soft} aria-label="Quarter" value={quarter} onChange={(e) => setQuarter(Number(e.target.value))}>
-              {[1, 2, 3, 4].map((q) => <NativeSelectOption key={q} value={q}>Q{q}</NativeSelectOption>)}
-            </NativeSelect>
-            {years.length > 1 && <NativeSelect size="sm" className={soft} aria-label="Year" value={year} onChange={(e) => setYear(e.target.value)}>
-              {years.map((y) => <NativeSelectOption key={y} value={y}>{y}</NativeSelectOption>)}
-            </NativeSelect>}
-          </>
-          : view === "month" ? month("Month shown", end, setEnd)
-          : <>ending {month("Last month shown", end, setEnd)}</>}
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button variant="secondary" size="sm" className="rounded-full" />}>
+            {UNITS[unit].label}<ChevronDownIcon data-icon="inline-end" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="min-w-64">
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Group amounts</DropdownMenuLabel>
+              {(Object.keys(UNITS) as Unit[]).map((k) => (
+                <DropdownMenuItem key={k} className="items-start gap-2 py-1.5" onClick={() => setUnit(k)}>
+                  <CheckIcon className={cn("mt-0.5 text-primary", k !== unit && "invisible")} />
+                  <span className="flex flex-col">
+                    <span className="font-medium">{UNITS[k].label}</span>
+                    <span className="text-xs text-muted-foreground">{UNITS[k].note}</span>
+                  </span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Popover>
+          <PopoverTrigger render={<Button variant={custom ? "secondary" : "outline"} size="sm" className="rounded-full tabular-nums" />}>
+            <CalendarIcon data-icon="inline-start" />
+            {isQuarter ? `Q${quarterOf(a)} ${a.slice(0, 4)}` : custom ? `${shortDate(a)} – ${shortDate(b)}, ${b.slice(0, 4)}` : "Date range"}
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-auto p-3">
+            <RangeCalendar first={first} last={last} range={custom ? [a, b] : null} marked={new Set(days.map((d) => d.date))}
+              onPick={(x, y) => setRange([x, y])} />
+          </PopoverContent>
+        </Popover>
+        <span className="ml-auto font-medium text-foreground tabular-nums">{peso(shown.reduce((t, d) => t + d.value, 0))}</span>
       </div>
       <ChartContainer config={config} className="aspect-auto h-full min-h-64 w-full">
         {shown.length < 3 ? (
@@ -127,7 +255,7 @@ export function TrendChart({ data }: { data: Point[] }) {
           </AreaChart>
         )}
       </ChartContainer>
-      <Figures caption="Amount by DV month" data={shown} />
+      <Figures caption="Amount by DV date" data={shown} />
     </div>
   )
 }
@@ -281,5 +409,88 @@ export function AreaDonutCard({ data }: { data: Point[] }) {
         ) : <p className="py-6 text-center text-sm text-muted-foreground">No trade areas selected.</p>}
       </CardContent>
     </Card>
+  )
+}
+
+/** Everything the summary shows for one trade area (or all of them); plain data so the server page can pass it. */
+export type AreaStat = {
+  name: string; href: string; vouchers: number; amount: number; verifiedCount: number; verifiedAmount: number
+  pendingCount: number; flagged: number; average: number; payees: Point[]; categories: Point[]; programs: Point[]
+}
+
+/** One trade area at a time: a soft dropdown picks it, the figures and breakdowns follow. */
+export function AreaSummary({ stats }: { stats: AreaStat[] }) {
+  const [name, setName] = useState(stats[0]?.name ?? "")
+  const a = stats.find((s) => s.name === name) ?? stats[0]
+  if (!a) return null
+  const pct = a.vouchers ? Math.round((100 * a.verifiedCount) / a.vouchers) : 0
+  const figures = [
+    ["Disbursed", peso(a.amount)],
+    ["Vouchers", a.vouchers.toLocaleString("en-US")],
+    ["Average voucher", peso(a.average)],
+    ["Needs fixing", a.flagged.toLocaleString("en-US")],
+  ]
+  return (
+    <div className="@container flex flex-col gap-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <DropdownMenu>
+          <DropdownMenuTrigger render={<Button variant="secondary" size="sm" className="max-w-full rounded-full" aria-label={`Trade area: ${a.name}`} />}>
+            <span className="truncate">{a.name}</span><ChevronDownIcon data-icon="inline-end" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="min-w-72">
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Trade area</DropdownMenuLabel>
+              {/* About five rows show at once; the rest scroll. */}
+              <div className="max-h-44 overflow-y-auto overscroll-contain">
+                {stats.map((s) => (
+                  <DropdownMenuItem key={s.name} className="gap-2 py-1.5" onClick={() => setName(s.name)}>
+                    <CheckIcon className={cn("text-primary", s.name !== a.name && "invisible")} />
+                    <span className={cn("min-w-0 flex-1 truncate", s.name === a.name && "font-medium")}>{s.name}</span>
+                    <span className="text-xs text-muted-foreground tabular-nums">{compact(s.amount)}</span>
+                  </DropdownMenuItem>
+                ))}
+              </div>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        {a.pendingCount > 0 && (
+          <Link href={a.href} className="ml-auto text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline print:hidden">
+            Open {a.pendingCount.toLocaleString("en-US")} pending
+          </Link>
+        )}
+      </div>
+      <dl className="grid grid-cols-2 gap-3 @3xl:grid-cols-4">
+        {figures.map(([k, v]) => (
+          <div key={k} className="flex flex-col gap-0.5 rounded-xl bg-muted/50 p-3">
+            <dt className="text-xs text-muted-foreground">{k}</dt>
+            <dd className="text-lg font-semibold tabular-nums">{v}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-baseline justify-between gap-3 text-sm">
+          <span className="font-medium">Verified</span>
+          <span className="text-muted-foreground tabular-nums">{a.verifiedCount.toLocaleString("en-US")} of {a.vouchers.toLocaleString("en-US")} · {pct}%</span>
+        </div>
+        <div role="img" aria-label={`${pct}% verified`} className="flex h-2 w-full gap-0.5 overflow-hidden rounded-full bg-muted">
+          {pct > 0 && <span className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />}
+        </div>
+        <p className="text-xs text-muted-foreground tabular-nums">{peso(a.verifiedAmount)} verified, {peso(a.amount - a.verifiedAmount)} for review</p>
+      </div>
+      <div className="grid gap-x-8 gap-y-5 border-t pt-4 @3xl:grid-cols-3">
+        {([["Top payees", a.payees], ["By category", a.categories]] as const).map(([title, data]) => data.length > 0 && (
+          <div key={title} className="flex flex-col gap-2">
+            <h3 className="text-sm font-medium">{title}</h3>
+            <RankedBars caption={`${title}, ${a.name}`} data={data} />
+          </div>
+        ))}
+        {a.programs.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <h3 className="text-sm font-medium">Programs</h3>
+            <DonutChart caption={`Amount by program, ${a.name}`} data={a.programs} />
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
