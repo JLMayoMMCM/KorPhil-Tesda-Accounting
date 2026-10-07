@@ -6,7 +6,7 @@ import { cache } from "react"
 
 import { enrich, inTab, TABS, todayManila, type Tab } from "@/lib/ledger"
 import { SESSION_COOKIE, unseal, type Session } from "@/lib/session"
-import { fetchVouchers, lastPull } from "@/lib/sheets"
+import { fetchVouchers, lastPull, selectionLists } from "@/lib/sheets"
 
 /** The signed-in session (proxy.ts has already refreshed it). */
 export const getSession = cache(async (): Promise<Session> => {
@@ -22,7 +22,7 @@ export const getData = cache(async () => {
   const today = todayManila()
   const rows = enrich(raw)
   const counts = Object.fromEntries((Object.keys(TABS) as Tab[]).map((t) => [t, rows.filter((r) => inTab(r, t)).length])) as Record<Tab, number>
-  return { rows, error, today, counts, pull: lastPull(), user: session.user }
+  return { rows, error, today, counts, pull: lastPull(), options: selectionLists(), user: session.user }
 })
 
 /** "3:05 PM" in Manila. */

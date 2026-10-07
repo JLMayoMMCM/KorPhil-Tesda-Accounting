@@ -5,7 +5,8 @@ import { safeNext } from "@/lib/nav"
 import { cookieOptions, redirectUri, seal, SESSION_COOKIE, STATE_COOKIE, TOKEN_URL, unseal, withTokens } from "@/lib/session"
 import { checkAccess } from "@/lib/sheets"
 
-const GOOGLE_KEYS = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"))
+// Same 10 s budget as the other Google calls (jose's default is 5 s).
+const GOOGLE_KEYS = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"), { timeoutDuration: 10_000 })
 
 /** Google redirects here after sign-in. The sheet's sharing is the access list. */
 export async function GET(request: NextRequest) {
@@ -38,13 +39,14 @@ export async function GET(request: NextRequest) {
       }),
       signal: AbortSignal.timeout(10_000),
     })
-    if (!response.ok) throw new Error(`token ${response.status}`)
+    if (!response.ok) throw new Error(`token ${response.status}: ${await response.text()}`)
     payload = await response.json()
     claims = (await jwtVerify(payload.id_token, GOOGLE_KEYS, {
       issuer: ["https://accounts.google.com", "accounts.google.com"],
       audience: process.env.GOOGLE_OAUTH_CLIENT_ID,
     })).payload
-  } catch {
+  } catch (exc) {
+    console.error("Google sign-in failed:", exc)
     return fail("failed")
   }
 

@@ -65,6 +65,20 @@ export function VoucherPanel({ row, initial, heading, status, source, options, c
     </Field>
   )
 
+  // The sheet's Selection List; a value already in the row stays selectable even if the list dropped it.
+  const pick = (name: keyof Props["options"], wide = false) => {
+    const choices = options[name].includes(initial[name]) || !initial[name] ? options[name] : [initial[name], ...options[name]]
+    return (
+      <Field className={wide ? "col-span-2" : undefined}>
+        <FieldLabel htmlFor={name}>{FIELD_LABELS[name]}</FieldLabel>
+        <NativeSelect id={name} name={name} defaultValue={initial[name]} className="w-full">
+          <NativeSelectOption value="">Not set</NativeSelectOption>
+          {choices.map((v) => <NativeSelectOption key={v} value={v}>{v}</NativeSelectOption>)}
+        </NativeSelect>
+      </Field>
+    )
+  }
+
   const note = row === null
     ? "Not saved yet · appends a row"
     : changed.length ? `Unsaved · writes to row ${row}` : `No changes · row ${row}`
@@ -101,9 +115,9 @@ export function VoucherPanel({ row, initial, heading, status, source, options, c
           </InputGroup>
         </Field>
         {text("check_number")}
-        {text("trade_area", { list: "opt-area" })}
-        {text("category", { list: "opt-category" })}
-        {text("diploma_st_assessment", { list: "opt-program" }, true)}
+        {pick("trade_area")}
+        {pick("category")}
+        {pick("diploma_st_assessment", true)}
         <Field className="col-span-2">
           <FieldLabel htmlFor="status">{FIELD_LABELS.status}</FieldLabel>
           <NativeSelect id="status" name="status" defaultValue={initial.status} className="w-full">
@@ -116,9 +130,6 @@ export function VoucherPanel({ row, initial, heading, status, source, options, c
           <Textarea id="particulars" name="particulars" rows={3} defaultValue={initial.particulars} />
         </Field>
       </FieldGroup>
-      <datalist id="opt-category">{options.category.map((v) => <option key={v} value={v} />)}</datalist>
-      <datalist id="opt-area">{options.trade_area.map((v) => <option key={v} value={v} />)}</datalist>
-      <datalist id="opt-program">{options.diploma_st_assessment.map((v) => <option key={v} value={v} />)}</datalist>
 
       <div className="flex flex-col gap-1 text-sm">
         {changed.length > 0 && <p className="font-medium">Changed: {changed.join(", ")}</p>}

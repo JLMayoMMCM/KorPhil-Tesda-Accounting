@@ -38,7 +38,7 @@ const PER = { "10": "10", "50": "50", "100": "100", all: "All" } as const
 
 export default async function Vouchers({ searchParams }: PageProps<"/vouchers">) {
   const params = toParams(await searchParams)
-  const { rows, error, pull } = await getData()
+  const { rows, error, pull, options } = await getData()
   const shown = filterRows(rows, params)
   const tab = (params.get("tab") ?? "") in TABS ? (params.get("tab") as Tab) : "all"
   const per = (params.get("per") ?? "") in PER ? (params.get("per") as keyof typeof PER) : "50"
@@ -234,7 +234,7 @@ export default async function Vouchers({ searchParams }: PageProps<"/vouchers">)
           heading={isNew ? "New voucher" : panelRow!.dv_no || "Untitled DV"}
           status={panelRow ? <IssueBadges issues={panelRow.issues} /> : "Adds a new row at the bottom of the sheet."}
           source={panelRow ? `Source: ${pull.title || "Google Sheet"} · row ${panelRow.sheet_row} · pulled ${clock(pull.at)}` : ""}
-          options={{
+          options={options ?? {
             trade_area: values(rows, "trade_area").filter((v) => v !== NOT_SET),
             diploma_st_assessment: values(rows, "diploma_st_assessment").filter((v) => v !== NOT_SET),
             category: values(rows, "category").filter((v) => v !== NOT_SET),

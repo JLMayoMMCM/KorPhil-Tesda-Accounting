@@ -5,7 +5,10 @@ import { serialDate, type Field, type RawVoucher } from "@/lib/ledger"
 // Column layout of the EXP tab, A:L. Columns B and G are unlabelled spacers and are dropped.
 // Column L is the review status ("Verified" / "For Review").
 // Rows 1-4 are the header, a label row, the totals row and a blank row; data starts on row 5.
-// Columns N:P hold the dropdown lists for H:J and are never read or written.
+// Dropdown choices for I:K come from the "Selection List" tab, one column per field (row 1 is its header).
+const LISTS_RANGE = "'Selection List'!A2:C"
+const LIST_FIELDS = ["trade_area", "diploma_st_assessment", "category"] as const
+export type Options = Record<(typeof LIST_FIELDS)[number], string[]>
 const COLUMNS: (Field | null)[] = [
   "dv_date", null, "dv_no", "payee", "particulars", "gross_amount", null,
   "check_number", "trade_area", "diploma_st_assessment", "category", "status",
@@ -21,7 +24,7 @@ const API = "https://sheets.googleapis.com/v4/spreadsheets"
 // ponytail: in-process cache, one pull per minute per server instance; move to a shared store if instances disagree too long
 export const CACHE_SECONDS = 60
 // Everyone who can reach the cache has already proven sheet access at sign-in (see auth/callback).
-const pull = { ts: 0, rows: [] as RawVoucher[], title: "", at: null as Date | null }
+const pull = { ts: 0, rows: [] as RawVoucher[], title: "", at: null as Date | null, options: null as Options | null }
 
 class SheetsError extends Error {
   status: number
@@ -74,15 +77,28 @@ export async function checkAccess(token: string): Promise<string | null> {
 export async function fetchVouchers(token: string | null, force = false): Promise<[RawVoucher[], string | null]> {
   let error: string | null = null
   if (force || Date.now() - pull.ts > CACHE_SECONDS * 1000) {
-    let rows: RawVoucher[] = []
-    ;[rows, error] = await pullSheet(token)
+    const [[rows, err], options] = await Promise.all([pullSheet(token), pullLists(token)])
+    error = err
     // Only a good pull replaces the shared cache, so one user's bad token can't blank it for everyone.
-    if (error === null) Object.assign(pull, { ts: Date.now(), rows, at: new Date() })
+    if (error === null) Object.assign(pull, { ts: Date.now(), rows, at: new Date(), options: options ?? pull.options })
   }
   return [pull.rows.map((r) => ({ ...r })), error]
 }
 
 export const lastPull = () => ({ title: pull.title, at: pull.at, rows: pull.rows.length })
+
+/** The sheet's dropdown choices per field, or null if the Selection List tab couldn't be read. */
+export const selectionLists = () => pull.options
+
+async function pullLists(token: string | null): Promise<Options | null> {
+  try {
+    const values: string[][] = (await call(valuesUrl(LISTS_RANGE, "?majorDimension=COLUMNS"), token)).values ?? []
+    return Object.fromEntries(LIST_FIELDS.map((f, i) =>
+      [f, [...new Set((values[i] ?? []).map((v) => String(v).trim()).filter(Boolean))]])) as Options
+  } catch {
+    return null // a renamed or missing tab must not block the voucher pull
+  }
+}
 
 async function pullSheet(token: string | null): Promise<[RawVoucher[], string | null]> {
   if (!SHEET_ID || !(token || API_KEY)) return [[], "Google Sheet is not configured. Set GOOGLE_SHEET_ID in .env.local."]
