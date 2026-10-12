@@ -1,11 +1,13 @@
-import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, ChartNoAxesColumnIcon, NotebookTextIcon } from "lucide-react"
+import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, ChartNoAxesColumnIcon, CheckIcon, ChevronDownIcon, NotebookTextIcon } from "lucide-react"
 import type { Metadata } from "next"
 import Link from "next/link"
 
-import { AreaSummary, DonutChart, RankedBars, TrendChart, type AreaStat, type Day, type Point } from "@/components/dashboard-charts"
+import { compact } from "@/components/charts"
+import { AreaSummary, DonutChart, RankedBars, SectionWheel, TrendChart, type AreaStat, type Day, type Point } from "@/components/dashboard-charts"
 import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Popover, PopoverContent, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover"
 import { getData } from "@/lib/data"
 import { byIssue, group, isVerified, ISSUES, label, longMonth, monthLabel, months, monthsBack, peso, qs, total, yearThrough, type Voucher } from "@/lib/ledger"
@@ -18,6 +20,9 @@ const RAMP = ["var(--chart-5)", "var(--chart-3)", "var(--chart-1)", "var(--chart
 
 // Soft panels: rounded, hairline border instead of a ring, barely-there shadow.
 const PANEL = "rounded-2xl ring-0 border shadow-xs"
+// On a `fit` window each section is one screen tall (below the action bar and page padding) and the page snaps to it.
+const SNAP = "fit:snap-start fit:scroll-mt-[calc(var(--header-h)+1rem)]"
+const SCREEN = "fit:h-[calc(100svh-var(--header-h)-2rem)]", SCREEN_MIN = "fit:min-h-[calc(100svh-var(--header-h)-2rem)]"
 const vouchers = (n: number) => `${n.toLocaleString("en-US")} voucher${n === 1 ? "" : "s"}`
 const MONTH_NUMBERS = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"]
 const share = (n: number, of: number) => (of ? (100 * n) / of : 0)
@@ -49,19 +54,27 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
     "/vouchers/" + qs(new URLSearchParams(), year === "all" ? changes : { ...changes, year })
 
   const switcher = (summary: React.ReactNode) => (
-    <div className="flex flex-col gap-1 border-b pb-2 print:hidden">
-      <nav aria-label="Year" className="flex flex-wrap items-center gap-1">
-        {[...years, "all"].map((y) => (
-          <Button key={y} size="sm" variant={y === year ? "secondary" : "ghost"} aria-current={y === year ? "page" : undefined}
-            render={<Link href={`/dashboard/?year=${y}`} />} nativeButton={false}>
-            {y === "all" ? "All years" : y}
-          </Button>
-        ))}
-        <span className="ml-auto text-sm text-muted-foreground">
-          {year === "all" ? "Every voucher, dated or not" : `January – December ${year}, by DV date`}
-        </span>
-        {summary}
-      </nav>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b pb-2 print:hidden">
+      {/* Year: the same soft pill menu as the chart controls, each year with what it disbursed. */}
+      <DropdownMenu>
+        <DropdownMenuTrigger render={<Button variant="secondary" size="sm" className="rounded-full tabular-nums" aria-label={`Year: ${scope}`} />}>
+          {year === "all" ? "All years" : year}<ChevronDownIcon data-icon="inline-end" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="min-w-56">
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Year, by DV date</DropdownMenuLabel>
+            {[...years, "all"].map((y) => (
+              <DropdownMenuItem key={y} className="gap-2 py-1.5" render={<Link href={`/dashboard/?year=${y}`} aria-current={y === year ? "page" : undefined} />}>
+                <CheckIcon className={cn("text-primary", y !== year && "invisible")} />
+                <span className={cn("flex-1 tabular-nums", y === year && "font-medium")}>{y === "all" ? "All years" : y}</span>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {compact(total(y === "all" ? everything : everything.filter((r) => r.month.startsWith(y + "-"))))}
+                </span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
       {year !== "all" && (
         <nav aria-label="Month" className="flex flex-wrap items-center gap-1">
           {MONTH_NUMBERS.map((m) => (
@@ -72,13 +85,19 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
           ))}
         </nav>
       )}
+      <div className="ml-auto flex items-center gap-3">
+        <span className="hidden text-sm text-muted-foreground @6xl/main:inline">
+          {year === "all" ? "Every voucher, dated or not" : `January – December ${year}, by DV date`}
+        </span>
+        {summary}
+      </div>
     </div>
   )
 
   if (!rows.length) {
     if (error) return null
     return (
-      <div className="flex flex-col gap-6">
+      <div className="@container/main flex flex-col gap-6">
         {everything.length > 0 && switcher(null)}
         <Empty>
           <EmptyHeader>
@@ -198,20 +217,22 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   ]
 
   return (
-    <div className="@container/main flex w-full flex-col gap-6 ">
+    <div data-snap className="@container/main flex w-full flex-col gap-4">
+      <SectionWheel />
+      <section aria-label="Overview" className={cn("flex flex-col gap-4", SNAP, SCREEN)}>
       {switcher(summary)}
-      {/* Key figures: this scope's total, and the picked month against the one before it. */}
+      {/* Key figures: this scope's total, and the picked month against the one before it. Each card is label and note, then the figure. */}
       <dl aria-label="Key figures" className="grid gap-4 break-inside-avoid @3xl/main:grid-cols-2">
-        <div className={cn(PANEL, "flex flex-col justify-between gap-4 bg-card p-5")}>
+        <div className={cn(PANEL, "grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1 bg-card px-5 py-4")}>
           <dt className="text-sm text-muted-foreground">Disbursed, {scope}</dt>
-          <dd className="text-4xl font-semibold tracking-tight tabular-nums @5xl/main:text-5xl">{peso(sum)}</dd>
-          <dd><Pill text={yearChange ?? vouchers(rows.length)} /></dd>
+          <dd className="col-span-2 text-3xl font-semibold tracking-tight tabular-nums @5xl/main:text-4xl">{peso(sum)}</dd>
+          <dd className="col-start-2 row-start-1"><Pill text={yearChange ?? vouchers(rows.length)} /></dd>
         </div>
-        <div className={cn(PANEL, "flex flex-col justify-between gap-4 bg-card p-5")}>
+        <div className={cn(PANEL, "grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1 bg-card px-5 py-4")}>
           <dt className="text-sm text-muted-foreground">{monthName}</dt>
-          <dd className="flex flex-wrap items-end justify-between gap-4">
+          <dd className="col-span-2 flex flex-wrap items-center justify-between gap-x-4">
             <span className="flex flex-wrap items-baseline gap-x-2.5">
-              <span className="text-4xl font-semibold tracking-tight tabular-nums">{peso(now)}</span>
+              <span className="text-3xl font-semibold tracking-tight tabular-nums @5xl/main:text-4xl">{peso(now)}</span>
               {delta !== null && (
                 <span title={verdict} className="inline-flex items-center gap-0.5 self-center text-sm font-medium tabular-nums" style={{ color: tone }}>
                   {delta > 0 ? <ArrowUpIcon aria-hidden="true" className="size-3.5" /> : delta < 0 ? <ArrowDownIcon aria-hidden="true" className="size-3.5" /> : null}
@@ -220,7 +241,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
                 </span>
               )}
             </span>
-            <svg aria-hidden="true" viewBox="0 0 160 56" className="h-14 w-40 shrink-0 overflow-visible" style={{ color: tone }}>
+            <svg aria-hidden="true" viewBox="0 0 160 56" className="h-10 w-28 shrink-0 overflow-visible" style={{ color: tone }}>
               <defs>
                 <linearGradient id="spark-fill" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="currentColor" stopOpacity={0.35} />
@@ -232,15 +253,15 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
               <circle cx={160} cy={52 - (46 * now) / peak} r={3} fill="currentColor" />
             </svg>
           </dd>
-          <dd className="text-sm text-muted-foreground">
-            Disbursed in {lastName}: <b className="text-base font-semibold text-foreground tabular-nums">{peso(before)}</b>
+          <dd className="col-start-2 row-start-1 text-sm text-muted-foreground">
+            Disbursed in {lastName}: <b className="font-semibold text-foreground tabular-nums">{peso(before)}</b>
           </dd>
         </div>
       </dl>
 
-      <div className="grid gap-4 @3xl/main:grid-cols-2 @5xl/main:grid-cols-12">
+      <div className="grid gap-4 @3xl/main:grid-cols-2 @5xl/main:grid-cols-12 fit:min-h-0 fit:flex-1 fit:grid-rows-[minmax(0,1fr)]">
         {/* Verification: donut + the three states with a way into each; what blocks verification explains "Needs fixing". */}
-        <Card className={cn(PANEL, "@container break-inside-avoid @5xl/main:col-span-5")}>
+        <Card className={cn(PANEL, "@container break-inside-avoid fit:min-h-0 @5xl/main:col-span-5")}>
           <CardHeader>
             <CardTitle>Verification</CardTitle>
             <CardDescription>
@@ -248,7 +269,8 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
               {" · "}{peso(total(verified))} of {peso(total(rows))}
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-1 flex-col gap-5">
+          {/* A long list of review checks scrolls inside the card rather than pushing the section past one screen. */}
+          <CardContent className="flex flex-1 flex-col gap-5 fit:min-h-0 fit:overflow-y-auto">
             <div className="grid items-center gap-4 @md:grid-cols-[12rem_1fr]">
               <DonutChart caption="Vouchers by verification state" legend={false} unit="voucher"
                 center={{ label: "Verified", value: percent(verified.length, rows.length) }}
@@ -286,14 +308,15 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
         </Card>
 
         <ChartCard title="Disbursed summary" description={`Amount by DV date, ${year === "all" ? "all years" : year} · by day, week or month, or any date range · verified under for review`}
-          className="@5xl/main:col-span-7">
+          className="fit:min-h-0 @5xl/main:col-span-7">
           <TrendChart key={year} days={[...byDay.values()]} from={from} to={to} />
         </ChartCard>
-
-        <ChartCard title="Summary per trade area" description="Pick an area to see its figures, payees, categories and programs" className="@3xl/main:col-span-2 @5xl/main:col-span-12">
-          <AreaSummary stats={areaStats} />
-        </ChartCard>
       </div>
+      </section>
+
+      <ChartCard title="Summary per trade area" description="Pick an area to see its figures, payees, categories and programs" className={cn(SNAP, SCREEN_MIN)}>
+        <AreaSummary stats={areaStats} />
+      </ChartCard>
     </div>
   )
 }
@@ -315,7 +338,7 @@ function ChartCard({ title, description, href, action = "View vouchers", classNa
           </CardAction>
         )}
       </CardHeader>
-      <CardContent className="flex-1">{children}</CardContent>
+      <CardContent className="min-h-0 flex-1">{children}</CardContent>
     </Card>
   )
 }

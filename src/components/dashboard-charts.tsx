@@ -3,7 +3,7 @@
 // Interactive Recharts views for the Dashboard, after shadcn's dashboard-01 block.
 // Amounts arrive in centavos from the server page; every chart also carries a screen-reader list of its figures.
 import Link from "next/link"
-import { useId, useState } from "react"
+import { useEffect, useId, useState } from "react"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Label, Pie, PieChart, XAxis, YAxis } from "recharts"
 
 import { CalendarIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ListFilterIcon } from "lucide-react"
@@ -49,6 +49,40 @@ function Figures({ caption, data }: { caption: string; data: Point[] }) {
       {data.map((d) => <li key={d.label}>{`${d.tip ?? d.label}: ${peso(d.value)}${d.verified === undefined ? "" : `, ${peso(d.verified)} verified`}`}</li>)}
     </ul>
   )
+}
+
+/**
+ * One wheel notch moves a whole Dashboard section. CSS snap alone springs back on a mouse wheel, because a notch
+ * scrolls less than half a screen; this glides to the next section instead. Renders nothing; sections are the
+ * element children of [data-snap], and only windows matching the `fit` variant in globals.css are handled.
+ */
+export function SectionWheel() {
+  useEffect(() => {
+    const fit = matchMedia("screen and (min-width: 80rem) and (min-height: 44rem)")
+    const calm = matchMedia("(prefers-reduced-motion: reduce)")
+    let until = 0
+    const onWheel = (e: WheelEvent) => {
+      if (!fit.matches || e.ctrlKey || !e.deltaY) return
+      const [first, second] = document.querySelectorAll<HTMLElement>("[data-snap] > *")
+      if (!second) return
+      // Menus, popovers and a card with its own overflow keep the wheel.
+      for (let n = e.target as HTMLElement | null; n && n !== document.body; n = n.parentElement) {
+        if (n.scrollHeight > n.clientHeight + 1 && /auto|scroll/.test(getComputedStyle(n).overflowY)) return
+      }
+      // Wheel and trackpad events keep arriving during the glide; swallow them so they don't fight it.
+      if (Date.now() < until) return e.preventDefault()
+      // How far the second section is below its resting place under the action bar (0 when it is there).
+      const gap = Math.round(second.getBoundingClientRect().top - parseFloat(getComputedStyle(second).scrollMarginTop))
+      const to = e.deltaY > 0 ? (gap > 1 ? second : null) : gap >= -1 && scrollY > 0 ? first : null
+      if (!to) return // inside a section taller than the window: scroll normally
+      e.preventDefault()
+      until = Date.now() + 600
+      to.scrollIntoView({ behavior: calm.matches ? "auto" : "smooth", block: "start" })
+    }
+    addEventListener("wheel", onWheel, { passive: false })
+    return () => removeEventListener("wheel", onWheel)
+  }, [])
+  return null
 }
 
 /** One DV date's amounts, in centavos. */
@@ -299,7 +333,7 @@ export function DonutChart({ data, caption, center, legend = true, unit }: {
   const hole = center ?? { label: "Total", value: compact(sum) }
   return (
     <div className="@container">
-    <figure className={legend ? "grid items-center gap-6 @md:grid-cols-[12rem_1fr]" : undefined}>
+    <figure className={legend ? "grid items-center gap-4 @md:grid-cols-[12rem_1fr]" : undefined}>
       <ChartContainer config={config} className="mx-auto aspect-square w-48">
         <PieChart>
           <ChartTooltip cursor={false} content={tooltipWith(fmt)} />
@@ -317,7 +351,7 @@ export function DonutChart({ data, caption, center, legend = true, unit }: {
       <figcaption className="sr-only">{caption}</figcaption>
       {legend && <ul className="grid gap-x-8 divide-y text-sm @2xl:grid-cols-2 @2xl:divide-y-0 [&>li]:border-b">
         {data.map((d) => (
-          <li key={d.label} className="grid grid-cols-[1fr_auto_3rem] items-center gap-3 py-2">
+          <li key={d.label} className="grid grid-cols-[1fr_auto_3rem] items-center gap-3 py-1.5">
             <span className="flex min-w-0 items-center gap-2">
               <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full" style={{ background: d.color }} />
               {d.href ? <Link href={d.href} className="min-w-0 break-words hover:underline">{d.label}</Link> : <span className="min-w-0 break-words">{d.label}</span>}
@@ -431,7 +465,7 @@ export function AreaSummary({ stats }: { stats: AreaStat[] }) {
     ["Needs fixing", a.flagged.toLocaleString("en-US")],
   ]
   return (
-    <div className="@container flex flex-col gap-5">
+    <div className="@container flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
         <DropdownMenu>
           <DropdownMenuTrigger render={<Button variant="secondary" size="sm" className="max-w-full rounded-full" aria-label={`Trade area: ${a.name}`} />}>

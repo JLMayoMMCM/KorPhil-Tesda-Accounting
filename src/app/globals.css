@@ -3,6 +3,8 @@
 @import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
+/* A desktop window tall enough for the Dashboard to give each section one full screen. */
+@custom-variant fit (@media screen and (min-width: 80rem) and (min-height: 44rem));
 
 @theme inline {
   --color-background: var(--background);
@@ -73,6 +75,8 @@
   --chart-4: oklch(0.488 0.243 264.376);
   --chart-5: oklch(0.424 0.199 265.638);
   --radius: 0.625rem;
+  /* The sticky action bar: 32px controls, 8px padding above and below, 1px rule. */
+  --header-h: 3.0625rem;
   --sidebar: #232a7c;
   --sidebar-foreground: #ffffff;
   --sidebar-primary: #ffffff;
@@ -141,10 +145,24 @@
   opacity: 1;
 }
 
+/* Dashboard: one scroll moves a whole section (see the `fit` variant). */
+@media screen and (min-width: 80rem) and (min-height: 44rem) {
+  html:has([data-snap]) {
+    scroll-snap-type: y mandatory;
+  }
+}
+
 /* Reports print as just the report. */
 @media print {
   [data-slot="sidebar"],
   [data-slot="sidebar-gap"] {
     display: none !important;
+  }
+}
+
+/* Login: the rings behind the seal swell and settle. */
+@keyframes login-rings {
+  to {
+    scale: 1.06;
   }
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { ExternalLinkIcon, FileSpreadsheetIcon, FileTextIcon, HomeIcon, LayoutDashboardIcon, MapIcon, ReceiptIcon, SettingsIcon } from "lucide-react"
+import { ExternalLinkIcon, FileSpreadsheetIcon, FileTextIcon, HomeIcon, ListChecksIcon, MapIcon, ReceiptIcon, SettingsIcon } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
@@ -23,7 +23,7 @@ export function AppSidebar({ counts, sheetTitle, synced, sheetUrl }: Props) {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" tooltip="KorPhil-TESDA" render={<Link href="/" />}>
+            <SidebarMenuButton size="lg" tooltip="KorPhil-TESDA" render={<Link href="/dashboard/" />}>
               <Image src="/logo.webp" alt="" width={32} height={32} />
               <span className="flex flex-col leading-tight">
                 <strong className="font-semibold">KorPhil-TESDA</strong>
@@ -43,8 +43,8 @@ export function AppSidebar({ counts, sheetTitle, synced, sheetUrl }: Props) {
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton isActive={path === "/"} tooltip="Workspace" render={<Link href="/" />}>
-                <LayoutDashboardIcon />Workspace
+              <SidebarMenuButton isActive={path.startsWith("/workspace")} tooltip="Workspace" render={<Link href="/workspace/" />}>
+                <ListChecksIcon />Workspace
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
