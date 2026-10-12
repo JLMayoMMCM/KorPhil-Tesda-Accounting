@@ -26,7 +26,7 @@ export default async function Workspace() {
   const sum = total(rows)
 
   return (
-    <div className="grid items-start gap-4 xl:grid-cols-[1fr_22rem]">
+    <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
       <section className="flex min-w-0 flex-col gap-2">
         <div className="flex flex-wrap items-baseline gap-2">
           <h2 className="font-heading text-base font-semibold">Needs review</h2>

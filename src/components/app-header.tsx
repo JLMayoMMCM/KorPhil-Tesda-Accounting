@@ -47,11 +47,11 @@ export function AppHeader({ user, synced }: { user: GoogleUser; synced: string }
         </InputGroup>
       </Form>
       <div className="ml-auto flex items-center gap-2">
-        <Button variant="outline" render={<Link href="/reports/" />} nativeButton={false} className="hidden lg:inline-flex">Run report</Button>
+        <Button variant="outline" render={<Link href="/reports/" />} nativeButton={false} className="hidden xl:inline-flex">Run report</Button>
         <Button variant="outline" render={<a href={exportUrl} download />} nativeButton={false}>
           <DownloadIcon data-icon="inline-start" />Export
         </Button>
-        {synced && <span className="hidden text-xs text-muted-foreground xl:inline">Synced {synced}</span>}
+        {synced && <span className="hidden text-xs text-muted-foreground 2xl:inline">Synced {synced}</span>}
         <SyncButton variant="outline">Sync</SyncButton>
         <DropdownMenu>
           <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="rounded-full" aria-label={`Account: ${name}`} />}>

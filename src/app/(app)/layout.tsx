@@ -23,7 +23,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           synced={synced ? `Synced ${synced} · ${pull.rows} rows` : "Not synced"}
           sheetUrl={sheetUrl}
         />
-        <SidebarInset>
+        <SidebarInset className="min-w-0">
           <AppHeader user={user} synced={synced} />
           {error && (
             <Alert variant="destructive" className="mx-4 mt-4 w-auto">
@@ -31,7 +31,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          <div className="flex flex-1 flex-col p-4">{children}</div>
+          <div className="flex flex-1 flex-col p-4 print:p-0">{children}</div>
         </SidebarInset>
       </SidebarProvider>
     </AppUI>

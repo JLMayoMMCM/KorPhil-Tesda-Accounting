@@ -61,13 +61,14 @@ export default async function Vouchers({ searchParams }: PageProps<"/vouchers">)
   if (q) chips.push([`Matches “${q}”`, qs(params, { q: null, open: null, page: null })])
   const clearUrl = qs(params, { area: null, month: null, year: null, issue: null, q: null, open: null, page: null })
   const filterCount = [area, month, year, issue].filter(Boolean).length
-  const wide = cn(panel && "hidden") // secondary columns hide while the panel is open
+  // Secondary columns: md+ only, and hidden while the panel is open (a bare "hidden" loses to md:table-cell).
+  const wide = panel ? "hidden" : "hidden md:table-cell"
   const step = (to: number, text: string) => to < 1 || to > pages
     ? <Button variant="outline" size="sm" disabled>{text}</Button>
     : <Button variant="outline" size="sm" render={<Link href={"/vouchers/" + qs(params, { page: String(to) })} />} nativeButton={false}>{text}</Button>
 
   return (
-    <div className={cn("grid items-start gap-4", panel && "lg:grid-cols-[minmax(0,1fr)_26rem]")}>
+    <div className={cn("grid items-start gap-4", panel && "lg:grid-cols-[minmax(0,1fr)_22rem] xl:grid-cols-[minmax(0,1fr)_26rem]")}>
       <section className="flex min-w-0 flex-col gap-3">
         <nav aria-label="Voucher views" className="flex flex-wrap items-center gap-1 border-b pb-2">
           {(Object.entries(TABS) as [Tab, string][]).map(([key, name]) => (
@@ -137,11 +138,11 @@ export default async function Vouchers({ searchParams }: PageProps<"/vouchers">)
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className={cn("w-8", wide)}><SelectAll /></TableHead>
+                  <TableHead className={cn("w-8", panel && "hidden")}><SelectAll /></TableHead>
                   <TableHead>DV # · date</TableHead>
                   <TableHead className="w-full">Payee · particulars</TableHead>
-                  <TableHead className={cn("hidden md:table-cell", wide)}>Area · program · category</TableHead>
-                  <TableHead className="hidden md:table-cell">Check #</TableHead>
+                  <TableHead className={wide}>Area · program · category</TableHead>
+                  <TableHead className={wide}>Check #</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
@@ -152,7 +153,7 @@ export default async function Vouchers({ searchParams }: PageProps<"/vouchers">)
                   const kind = [r.diploma_st_assessment, r.category].filter(Boolean).join(" · ")
                   return (
                     <LinkRow key={r.sheet_row} href={openUrl} data-state={panelRow?.sheet_row === r.sheet_row ? "selected" : undefined}>
-                      <TableCell className={wide}><RowCheck row={r.sheet_row} label={r.dv_no} /></TableCell>
+                      <TableCell className={cn(panel && "hidden")}><RowCheck row={r.sheet_row} label={r.dv_no} /></TableCell>
                       <TableCell>
                         <Link className="font-medium hover:underline" href={openUrl} scroll={false}>{r.dv_no || "Untitled DV"}</Link>
                         <div className="text-xs text-muted-foreground">{(r.dv ? longDate(r.dv) : r.dv_date) || "No date"}</div>
@@ -161,11 +162,11 @@ export default async function Vouchers({ searchParams }: PageProps<"/vouchers">)
                         <div className="truncate" title={r.payee}>{r.payee || "—"}</div>
                         <div className="truncate text-xs text-muted-foreground" title={r.particulars}>{r.particulars || "—"}</div>
                       </TableCell>
-                      <TableCell className={cn("hidden max-w-48 md:table-cell", wide)}>
+                      <TableCell className={cn("max-w-48", wide)}>
                         <div className="truncate" title={r.trade_area}>{r.trade_area || "—"}</div>
                         <div className="truncate text-xs text-muted-foreground" title={kind}>{kind || "—"}</div>
                       </TableCell>
-                      <TableCell className="hidden text-muted-foreground tabular-nums md:table-cell">{r.check_number || "—"}</TableCell>
+                      <TableCell className={cn("text-muted-foreground tabular-nums", wide)}>{r.check_number || "—"}</TableCell>
                       <TableCell className="text-right font-medium tabular-nums">{peso(r.amount)}</TableCell>
                       <TableCell className="max-w-56 whitespace-normal">
                         <div className="flex flex-col items-start gap-1">

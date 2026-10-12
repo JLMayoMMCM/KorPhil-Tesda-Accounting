@@ -204,7 +204,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
       <dl aria-label="Key figures" className="grid gap-4 break-inside-avoid @3xl/main:grid-cols-2">
         <div className={cn(PANEL, "flex flex-col justify-between gap-4 bg-card p-5")}>
           <dt className="text-sm text-muted-foreground">Disbursed, {scope}</dt>
-          <dd className="text-5xl font-semibold tracking-tight tabular-nums">{peso(sum)}</dd>
+          <dd className="text-4xl font-semibold tracking-tight tabular-nums @5xl/main:text-5xl">{peso(sum)}</dd>
           <dd><Pill text={yearChange ?? vouchers(rows.length)} /></dd>
         </div>
         <div className={cn(PANEL, "flex flex-col justify-between gap-4 bg-card p-5")}>
@@ -240,7 +240,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
 
       <div className="grid gap-4 @3xl/main:grid-cols-2 @5xl/main:grid-cols-12">
         {/* Verification: donut + the three states with a way into each; what blocks verification explains "Needs fixing". */}
-        <Card className={cn(PANEL, "break-inside-avoid @5xl/main:col-span-5")}>
+        <Card className={cn(PANEL, "@container break-inside-avoid @5xl/main:col-span-5")}>
           <CardHeader>
             <CardTitle>Verification</CardTitle>
             <CardDescription>

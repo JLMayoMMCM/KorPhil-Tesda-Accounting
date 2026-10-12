@@ -83,7 +83,7 @@ export default async function Areas({ searchParams }: PageProps<"/areas">) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Area</TableHead>
+                <TableHead className="sticky left-0 bg-background">Area</TableHead>
                 {columns.map((key) => <TableHead key={key} className="text-right">{colName(key)}</TableHead>)}
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead className="w-40">Share of total</TableHead>
@@ -92,7 +92,7 @@ export default async function Areas({ searchParams }: PageProps<"/areas">) {
             <TableBody>
               {matrix.map((m) => (
                 <TableRow key={m.area}>
-                  <TableHead scope="row" className="font-medium">{m.area}</TableHead>
+                  <TableHead scope="row" className="sticky left-0 bg-background font-medium">{m.area}</TableHead>
                   {m.cells.map((c) => (
                     <TableCell key={c.key} className="p-1 text-right">
                       {c.count ? (
@@ -117,7 +117,7 @@ export default async function Areas({ searchParams }: PageProps<"/areas">) {
             </TableBody>
             <TableFooter>
               <TableRow>
-                <TableHead scope="row">All areas</TableHead>
+                <TableHead scope="row" className="sticky left-0 bg-[color-mix(in_oklab,var(--muted)_50%,var(--background))]">All areas</TableHead>
                 {totals.map((t, i) => <TableCell key={i} className="text-right tabular-nums">{byCount ? t.count : peso(t.amount)}</TableCell>)}
                 <TableCell className="text-right tabular-nums">{byCount ? scoped.length : peso(total(scoped))}</TableCell>
                 <TableCell />

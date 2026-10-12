@@ -2,7 +2,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { byIssue, enrich, filterRows, inTab, median, monthsBack, parseAmount, parseDate, peso, qs, serialDate, sheetDate, total, yearThrough, type RawVoucher } from "./ledger.ts"
+import { byIssue, enrich, filterRows, inTab, median, monthsBack, paginate, parseAmount, parseDate, peso, qs, serialDate, sheetDate, total, yearThrough, type RawVoucher } from "./ledger.ts"
 
 let n = 5
 const row = (dv_no: string, dv_date: string, amount = "1,000.50", check = "3477204", area = "ADMIN"): RawVoucher => ({
@@ -59,4 +59,14 @@ test("dashboard figures", () => {
   assert.equal(monthsBack("2026-01", 1), "2025-12")
   assert.equal(total(yearThrough(rs, 2026, "10")), 40000) // Jan–Oct 2026 leaves out November
   assert.equal(total(yearThrough(rs, 2025, "10")), 20000) // the same window a year earlier
+})
+
+test("paginate", () => {
+  const h = { cap: 100, start: 40, carry: 10, head: 10, row: 10, gap: 0, end: 30 }
+  // 3 rows + total fit page 1 (40 + 10 + 4*10 = 90); sign-off (30) spills to a new page.
+  assert.deepEqual(paginate([3], h), [[{ block: 0, from: 0, to: 4 }], []])
+  // 10 rows + total: page 1 takes 5, page 2 takes the other 5 + total, sign-off still fits? 10+10+60=80, +30 > 100.
+  assert.deepEqual(paginate([10], h), [[{ block: 0, from: 0, to: 5 }], [{ block: 0, from: 5, to: 11 }], []])
+  // Two small blocks share page 1; no rows still prints its total row.
+  assert.deepEqual(paginate([0, 1], { ...h, start: 0 }), [[{ block: 0, from: 0, to: 1 }, { block: 1, from: 0, to: 2 }]])
 })
