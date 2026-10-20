@@ -16,19 +16,21 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import { VoucherPanel } from "@/components/voucher-panel"
 import { clock, getData } from "@/lib/data"
 import {
-  FIELDS, filterRows, FOR_REVIEW, inTab, isVerified, ISSUES, monthLabel, VERIFIED, months, NOT_SET, parseDate, peso, qs, longDate, TABS, toParams, total,
-  values, type Field as FieldName, type Issue, type Tab, type Voucher,
+  filterRows, FOR_REVIEW, inTab, isVerified, ISSUES, monthLabel, VERIFIED, months, parseDate, peso, qs, longDate, TABS, toParams, total,
+  values, type Issue, type Tab, type Voucher,
 } from "@/lib/ledger"
+import type { Column } from "@/lib/sheet-config"
 import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = { title: "Vouchers" }
 
-/** Panel form values: sheet values, with parseable dates as ISO for the date pickers. */
-function formFromRow(r: Voucher | null): Record<FieldName, string> {
-  const form = Object.fromEntries(FIELDS.map((f) => [f, r ? r[f] : ""])) as Record<FieldName, string>
-  form.dv_date = parseDate(form.dv_date) ?? form.dv_date
-  form.status = r && isVerified(r) ? VERIFIED : FOR_REVIEW
-  return form
+/** Panel form values by column key: sheet values, with parseable dates as ISO for the date pickers. */
+function formFromRow(r: Voucher | null, columns: Column[]): Record<string, string> {
+  return Object.fromEntries(columns.map((c) => {
+    const v = !r ? "" : c.field ? r[c.field] : r.extra?.[c.key] ?? ""
+    if (c.field === "status") return [c.key, r && isVerified(r) ? VERIFIED : FOR_REVIEW]
+    return [c.key, c.type === "date" ? parseDate(v) ?? v : v]
+  }))
 }
 
 const plural = (n: number) => (n === 1 ? "" : "s")
@@ -38,7 +40,7 @@ const PER = { "10": "10", "50": "50", "100": "100", all: "All" } as const
 
 export default async function Vouchers({ searchParams }: PageProps<"/vouchers">) {
   const params = toParams(await searchParams)
-  const { rows, error, pull, options } = await getData()
+  const { rows, error, pull, columns } = await getData()
   const shown = filterRows(rows, params)
   const tab = (params.get("tab") ?? "") in TABS ? (params.get("tab") as Tab) : "all"
   const per = (params.get("per") ?? "") in PER ? (params.get("per") as keyof typeof PER) : "50"
@@ -56,6 +58,8 @@ export default async function Vouchers({ searchParams }: PageProps<"/vouchers">)
   const area = params.get("area"), month = params.get("month"), issue = params.get("issue"), q = params.get("q"), year = params.get("year")
   if (year) chips.push([`DV date in ${year}`, qs(params, { year: null, open: null, page: null })])
   if (area) chips.push([`Area is ${area}`, qs(params, { area: null, open: null, page: null })])
+  const col = params.get("col"), is = params.get("is")
+  if (col && is !== null) chips.push([`${columns.find((c) => c.key === col)?.label ?? col} is ${is}`, qs(params, { col: null, is: null, open: null, page: null })])
   if (month) chips.push([`DV date in ${monthLabel(month)}`, qs(params, { month: null, open: null, page: null })])
   if (issue) chips.push([issue in ISSUES ? ISSUES[issue as Issue] : issue === "none" ? "No review flags" : issue === "any" ? "Any review flag" : `Check: ${issue}`, qs(params, { issue: null, open: null, page: null })])
   if (q) chips.push([`Matches “${q}”`, qs(params, { q: null, open: null, page: null })])
@@ -133,7 +137,7 @@ export default async function Vouchers({ searchParams }: PageProps<"/vouchers">)
         )}
 
         {shown.length ? (
-          <Selection items={pageRows.map(({ sheet_row, dv_no, amount }) => ({ sheet_row, dv_no, amount }))}>
+          <Selection verify={columns.some((c) => c.field === "status" && c.visibility === "shown")} items={pageRows.map(({ sheet_row, dv_no, amount }) => ({ sheet_row, dv_no, amount }))}>
             {/* Related fields stack two to a cell so every field fits without scrolling sideways; Payee takes the slack and truncates. */}
             <Table>
               <TableHeader>
@@ -229,17 +233,13 @@ export default async function Vouchers({ searchParams }: PageProps<"/vouchers">)
 
       {panel && (
         <VoucherPanel
-          key={panelRow ? `${panelRow.sheet_row}:${FIELDS.map((f) => panelRow[f]).join("|")}` : "new"}
+          key={panelRow ? `${panelRow.sheet_row}:${Object.values(formFromRow(panelRow, columns)).join("|")}` : "new"}
           row={panelRow?.sheet_row ?? null}
-          initial={formFromRow(panelRow)}
+          initial={formFromRow(panelRow, columns)}
+          columns={columns}
           heading={isNew ? "New voucher" : panelRow!.dv_no || "Untitled DV"}
           status={panelRow ? <IssueBadges issues={panelRow.issues} /> : "Adds a new row at the bottom of the sheet."}
           source={panelRow ? `Source: ${pull.title || "Google Sheet"} · row ${panelRow.sheet_row} · pulled ${clock(pull.at)}` : ""}
-          options={options ?? {
-            trade_area: values(rows, "trade_area").filter((v) => v !== NOT_SET),
-            diploma_st_assessment: values(rows, "diploma_st_assessment").filter((v) => v !== NOT_SET),
-            category: values(rows, "category").filter((v) => v !== NOT_SET),
-          }}
           closeUrl={closeUrl}
         />
       )}

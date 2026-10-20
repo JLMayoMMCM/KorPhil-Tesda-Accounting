@@ -11,7 +11,7 @@ import { NativeSelectOption } from "@/components/ui/native-select"
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getData } from "@/lib/data"
 import { monthLabel, months, paginate, qs, todayManila, toParams, values } from "@/lib/ledger"
-import { buildReport, CLUSTERS, clusterOf, fmtCell, PERIODS, REPORTS, type Cell, type Col } from "@/lib/reports"
+import { buildReport, clusterOf, clustersFor, fmtCell, PERIODS, titleOf, type Cell, type Col } from "@/lib/reports"
 import { fullName } from "@/lib/session"
 
 export const metadata: Metadata = { title: "Reports" }
@@ -33,8 +33,8 @@ const right = (c: Col) => (c.fmt === "text" ? "" : "text-right")
 
 export default async function Reports({ searchParams }: PageProps<"/reports">) {
   const params = toParams(await searchParams)
-  const { rows, pull, user } = await getData()
-  const { kind, scope, area, scoped, tables } = buildReport(rows, params, todayManila())
+  const { rows, pull, user, columns } = await getData()
+  const { kind, scope, area, scoped, tables } = buildReport(rows, params, todayManila(), columns)
   const paper: Paper = (params.get("paper") ?? "") in PAPERS ? (params.get("paper") as Paper) : "short"
   const [, paperW, paperH, paperPx, paperWPx] = PAPERS[paper]
   const generated = new Date().toLocaleString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Manila" })
@@ -98,13 +98,13 @@ export default async function Reports({ searchParams }: PageProps<"/reports">) {
 
       <div className="grid items-start gap-4 lg:grid-cols-[15rem_minmax(0,1fr)] print:block">
         <nav aria-label="Reports" className="flex flex-col gap-3 print:hidden">
-          {CLUSTERS.map(([name, kinds]) => (
+          {clustersFor(columns).map(([name, kinds]) => (
             <div key={name} className="flex flex-col gap-1">
               <h2 className="px-2.5 text-xs font-medium text-muted-foreground">{name}</h2>
               {kinds.map((k) => (
                 <Button key={k} variant={k === kind ? "secondary" : "ghost"} className="h-auto justify-start py-1.5 text-left whitespace-normal" aria-current={k === kind ? "page" : undefined}
                   render={<Link href={"/reports/" + qs(params, { report: k })} />} nativeButton={false}>
-                  {REPORTS[k]}
+                  {titleOf(k)}
                 </Button>
               ))}
             </div>
@@ -137,7 +137,7 @@ export default async function Reports({ searchParams }: PageProps<"/reports">) {
                     </header>
                     <div className="flex flex-col items-center gap-0.5 border-y-2 border-double border-foreground/70 py-2 text-center">
                       <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Accounting Office · Disbursement report</p>
-                      <h2 className="font-heading text-lg font-bold tracking-tight text-balance">{REPORTS[kind]}</h2>
+                      <h2 className="font-heading text-lg font-bold tracking-tight text-balance">{titleOf(kind)}</h2>
                       <p className="text-sm">{scope.label} · {where}</p>
                       <p className="text-xs text-muted-foreground">Generated {generated}</p>
                     </div>
@@ -168,7 +168,7 @@ export default async function Reports({ searchParams }: PageProps<"/reports">) {
                   </>
                 ) : (
                   <header className="flex justify-between gap-4 border-b pb-2 text-xs text-muted-foreground">
-                    <strong className="text-foreground">RTC – KorPhil VTC · {REPORTS[kind]}</strong>
+                    <strong className="text-foreground">RTC – KorPhil VTC · {titleOf(kind)}</strong>
                     <span>{scope.label} · {where}</span>
                   </header>
                 )}

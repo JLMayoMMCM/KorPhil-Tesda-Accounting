@@ -18,7 +18,8 @@ type Ctx = { items: Item[]; selected: Set<number>; toggle: (row: number, on: boo
 const SelectionCtx = React.createContext<Ctx | null>(null)
 const useSelection = () => React.use(SelectionCtx)!
 
-export function Selection({ items, children }: { items: Item[]; children: React.ReactNode }) {
+/** verify: false hides Verify / For review (the sheet has no editable status column). */
+export function Selection({ items, verify = true, children }: { items: Item[]; verify?: boolean; children: React.ReactNode }) {
   const [selected, setSelected] = React.useState<Set<number>>(new Set())
   // Drop rows that disappeared (edited, filtered away) after a refresh.
   const live = React.useMemo(() => new Set(items.map((i) => i.sheet_row)), [items])
@@ -33,7 +34,7 @@ export function Selection({ items, children }: { items: Item[]; children: React.
   return (
     <SelectionCtx value={{ items, selected: current, toggle, setAll }}>
       {children}
-      <BulkBar />
+      <BulkBar verify={verify} />
     </SelectionCtx>
   )
 }
@@ -57,7 +58,7 @@ export function SelectAll() {
   )
 }
 
-function BulkBar() {
+function BulkBar({ verify }: { verify: boolean }) {
   const { items, selected, setAll } = useSelection()
   const { run } = useUI()
   if (!selected.size) return null
@@ -75,11 +76,13 @@ function BulkBar() {
     <div role="region" aria-label="Selection"
       className="sticky bottom-4 z-10 mx-auto mt-4 flex w-full max-w-2xl flex-wrap items-center gap-2 rounded-xl bg-foreground px-4 py-2 text-sm text-background shadow-lg">
       <span><strong>{rows.length}</strong> selected · <span className="tabular-nums">{peso(sum)}</span></span>
-      <Button variant="secondary" className="ml-auto" onClick={() => mark(true)}>
-        <BadgeCheckIcon data-icon="inline-start" />Verify {rows.length}
-      </Button>
-      <Button variant="ghost" className="text-background hover:bg-background/10 hover:text-background" onClick={() => mark(false)}>For review</Button>
-      <Button variant="secondary" render={<a href={exportUrl} download />} nativeButton={false}>
+      {verify && <>
+        <Button variant="secondary" className="ml-auto" onClick={() => mark(true)}>
+          <BadgeCheckIcon data-icon="inline-start" />Verify {rows.length}
+        </Button>
+        <Button variant="ghost" className="text-background hover:bg-background/10 hover:text-background" onClick={() => mark(false)}>For review</Button>
+      </>}
+      <Button variant="secondary" className={verify ? undefined : "ml-auto"} render={<a href={exportUrl} download />} nativeButton={false}>
         <DownloadIcon data-icon="inline-start" />Export {rows.length}
       </Button>
       <Button variant="ghost" className="text-background hover:bg-background/10 hover:text-background" onClick={() => setAll(false)}>Clear</Button>

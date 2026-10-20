@@ -106,3 +106,61 @@ Net: about -730 lines, -0 deps (`shadcn`, `server-only` and `cn` are all used: `
 ### Follow-ups
 
 - [ ] **Browser check:** the report page needs a Google sign-in; the layout and the page-height estimates (`H` in `reports/page.tsx`) are not yet checked on screen or in print.
+
+## R5 · Modular sheet · 2026-10-21
+
+**Goal:** the app follows the Google Sheet's layout instead of hard-coding it, in six phases with no structural change to the sheet (plan: *KorPhil-TESDA Accounting — Modular Sheet Revision Plan*). Today's layout stays the fallback throughout. All six phases (0–5) are built. `SHEET_LAYOUT` defaults to `fixed`, so the live app keeps the Phase 0 layout until Settings confirms the detected layout matches and `SHEET_LAYOUT=detected` is set.
+
+### Phase 0 · Write-path safety
+
+- [x] **Cell writes only:** every save goes through `writeCells` in `sheets.ts`, one `values:batchUpdate` range per cell. Spacer columns B and G are no longer blanked, and an edit writes only the fields that differ from the sheet, so untouched formula cells (e.g. F199 `=5940/2`) stay formulas.
+- [x] **RAW codes:** DV # and check # are written `RAW`; dates, amounts and the rest stay `USER_ENTERED`. A new voucher is appended with those two cells left empty, then they are written `RAW` into the row Google reports.
+- [x] **Re-check before save:** `saveVoucher` re-reads the sheet and refuses if the row no longer holds the DV # the form opened with ("Sync and try again"), as `renumberVoucher` already did.
+- [x] **Cache keyed by sheet ID.**
+- [x] **Write log:** each written cell logs `[sheet write]` with range, old value (as last pulled), new value and the user's email, beside the sheet's own version history.
+- [x] Settings and `readme.md` say A:L (from `LAST_COLUMN`), not A:J.
+
+### Phase 1 · Layout detection in shadow mode
+
+- [x] `src/lib/sheet-config.ts`: the fixed layout (`FIXED`, replacing `COLUMNS` / `FIRST_ROW` / `LAST_COLUMN`), accepted header text per field, required fields (DV #, DV date, gross amount), optional `SHEET_HEADER_ROW` / `SHEET_FIRST_ROW` overrides, `normalize`, `colLetter`, `detectLayout`, `classifyRow`.
+- [x] The pull now reads the whole tab (no column limit). Detection searches the top 20 rows for the header with the most known headers (joining a cell with the one above for two-line headers) and classifies every row below it: voucher, skipped (blank, placeholder, sample/instruction text, totals, amount as text, one or two cells) or unsure.
+- [x] **Settings → Detected layout:** field · column · header in sheet · found/missing/extra, the skipped and unsure rows with their reason, and whether it matches the fixed layout and today's row count. (Became the "Sheet layout" card in Phase 2.)
+- [x] Tests: normalization and aliases, header-row detection with title rows and a two-line header, overrides, the row classifier (totals, placeholder, example, sparse voucher), `colLetter` past Z.
+
+### Phase 2 · Reads and writes through the column map
+
+- [x] `readSheet` in `sheet-config.ts` turns the whole tab into a `SheetModel`: layout, columns, voucher rows, skipped rows, the next empty row and a header signature. Precedence: saved settings → detection → fixed.
+- [x] **Rollback switch:** `SHEET_LAYOUT=detected` reads and writes through that model; anything else (the default, `fixed`) keeps Phase 0 exactly, including the pre-R5 "every non-blank row from row 5" read and the `INSERT_ROWS` append. Detection failing also falls back to fixed, with the reason on Settings.
+- [x] Reads: detected rows go through the classifier; **unsure rows are still read** (nothing is dropped silently) and are listed on Settings. Each voucher keeps its real `sheet_row`, plus `extra` values for columns with no role.
+- [x] Writes: one `values:batchUpdate` range per cell, addressed through the model. DV #, check # and payee are `RAW`; the rest `USER_ENTERED`. `setDvNo` and `setStatuses` use the same path.
+- [x] **Before every write** the header row and each target row are re-read (one `batchGet`): a changed header, a target row whose DV # moved, or a row that isn't a voucher refuses the save with "Sync and try again".
+- [x] New voucher (detected): written into the first row after the last voucher that is empty in every mapped column, checked empty first. A totals row right below the data is skipped over, never written into (open decision 1, answered "insert below it").
+
+### Phase 3 · Modular inputs
+
+- [x] The voucher panel is built from the columns in sheet order, labelled with the sheet's header text. Input type: dropdown (Selection List column with the same row-1 header), date ("date" in the header, or dates typed as text), money (mostly numbers), long text (mostly over 60 characters), else text. Core roles keep fixed types (Particulars always long text, etc.).
+- [x] Dropdowns match Selection List columns by header; when no header matches any column, the old A, B, C order is the fallback.
+- [x] Extra columns get inputs and are saved; read-only columns show disabled; hidden ones don't show. They're in the CSV export, not in the vouchers table (open decision 2, answered "panel and CSV only").
+- [x] Missing optional roles: no Check # → "No check #" flag and coverage KPI off; no Trade area → its flag and report off; no Status → Verify / For review bulk buttons hidden; no Payee → payee report hidden.
+
+### Phase 4 · Generic reports and filters
+
+- [x] Every dropdown column without a role gets a "Disbursements by …" section (`?report=x:<header>`), after the category / trade area / diploma sections in Analysis of disbursements and in the full report, in the R4 table format; the CSV follows. The three existing sections and their order are unchanged.
+- [x] Dashboard: "Summary per …" groups by any dropdown column (trade area by default) with a Group by picker; each group links to the vouchers list through a new generic `?col=&is=` filter (trade area still uses `?area=`).
+
+### Phase 5 · Settings editor
+
+- [x] **Settings → Layout settings:** a grid of the first 20 rows to pick the header row and rows to ignore (plus a box for rows further down); per column: role, input type, visibility. **Check** shows "N vouchers read, N rows ignored, all required roles mapped"; **Save** is refused while DV #, DV date or gross amount is unmapped or not shown; **Reset to auto-detect** removes the settings. Last author and time are shown.
+- [x] Stored as developer metadata, visibility `PROJECT`: a spreadsheet-level record (who and when), a tag on the header row, one on each ignored row, and one per configured column holding its role, type and visibility (kept on the column so it survives moves; the plan's single spreadsheet-level JSON was split this way for that reason). Rows inserted above keep the tags in place.
+- [x] Permissions come from Google: writing metadata needs edit access, so a Viewer's save fails with the usual "share it with you as Editor" message.
+- [x] Tests: `readSheet` (fixed vs detected rows, totals skipped, next row, types, list matching by header and by position, an added Remarks and Funding Source column, a missing Check # column), `savedFrom` (moved header tag, ignored row, column role, another tab's tags), hand-mapped roles for unknown headers, `inferType`, the generic `col`/`is` filter. `tsc`, `eslint` and `node --test` (8 groups) pass.
+
+### Follow-ups
+
+- [ ] **Turn it on:** open Settings against the live sheet. The "Sheet layout" card should say "Same columns as the fixed layout" with the voucher count close to the fixed one (641+; unsure rows are counted, skipped ones listed). Then set `SHEET_LAYOUT=detected` (first on a test-copy preview, then on Vercel). If a header shows as Missing, add its text to `HEADERS` in `sheet-config.ts` or map it in Layout settings. The live sheet couldn't be reached from the dev sandbox.
+- [ ] **Test copy:** run the plan's scenarios on a copy (inserted / removed column, three title rows, instruction rows, totals moved to the bottom then a new voucher, sort while a voucher is open, a Remarks column and a dropdown column with its Selection List column), and save settings as an Editor and as a Viewer.
+- [ ] **Unverified against Google:** the developer-metadata calls (search, create, delete) and `values:batchGet` follow the API reference but have not run against a real sheet.
+- [ ] **Build and browser check:** `next build` wasn't run (the sandbox can't fetch Google Fonts) and nothing has been checked on screen; this also covers the R3/R4 browser follow-ups.
+- [ ] **Not done from the plan:** two columns with the same header pick the first, not "the one holding the expected data type"; the Trade Areas page stays trade-area only.
+- [ ] **Open decisions left:** whether only named people (not all Editors) may change settings; several sheet files (one per year) as a later revision.
+

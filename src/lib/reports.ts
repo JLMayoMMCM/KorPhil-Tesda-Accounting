@@ -1,4 +1,5 @@
-import { byIssue, group, isVerified, ISSUES, label, longMonth, median, monthLabel, months, monthsBack, NOT_SET, peso, total, type Issue, type Voucher } from "@/lib/ledger"
+import { byIssue, group, isVerified, ISSUES, label, longMonth, median, monthLabel, months, monthsBack, NOT_SET, peso, total, type Field, type Issue, type Voucher } from "@/lib/ledger"
+import type { Column } from "@/lib/sheet-config"
 
 // Order follows the usual layout of a financial report: key figures first, then the analysis of
 // disbursements by nature (category) and by segment (trade area, program), then period and
@@ -14,8 +15,12 @@ export const REPORTS = {
   review: "Exceptions for review",
   audit: "Voucher register (audit extract)",
 } as const
-export type Kind = keyof typeof REPORTS
+// R5: every other dropdown column in the sheet gets its own breakdown, keyed by its column key ("x:" + header).
+export type Kind = keyof typeof REPORTS | `x:${string}`
 type TableKind = Exclude<Kind, "summary">
+export const titleOf = (k: Kind) => (k.startsWith("x:") ? `Disbursements by ${k.slice(2)}` : REPORTS[k as keyof typeof REPORTS])
+// The column each fixed breakdown needs; without it the report is left out.
+const NEEDS: Partial<Record<Kind, Field>> = { category: "category", area: "trade_area", program: "diploma_st_assessment", payee: "payee" }
 
 /** Reports grouped as the sidebar and the full report's contents list them. */
 export const CLUSTERS: [string, Kind[]][] = [
@@ -24,9 +29,18 @@ export const CLUSTERS: [string, Kind[]][] = [
   ["Period and payee", ["monthly", "payee"]],
   ["Compliance", ["review", "audit"]],
 ]
-export const clusterOf = (k: Kind) => CLUSTERS.find(([, ks]) => ks.includes(k))![0]
+export const clusterOf = (k: Kind) => (k.startsWith("x:") ? CLUSTERS[1][0] : CLUSTERS.find(([, ks]) => ks.includes(k))![0])
 /** The full report compiles every table except the register, which is every voucher and stays separate. */
 const SUMMARY: TableKind[] = ["kpi", "category", "area", "program", "monthly", "payee", "review"]
+
+/** Dropdown columns with no role: each one's report kind. */
+const extraKinds = (columns: Column[]) =>
+  columns.filter((c) => !c.field && c.type === "dropdown" && c.visibility !== "hidden").map((c) => c.key as `x:${string}`)
+/** CLUSTERS for this sheet: fixed breakdowns whose column exists, then the extra dropdown columns after them. */
+export function clustersFor(columns: Column[]): [string, Kind[]][] {
+  const has = (k: Kind) => !NEEDS[k] || columns.some((c) => c.field === NEEDS[k])
+  return CLUSTERS.map(([name, ks], i) => [name, [...ks.filter(has), ...(i === 1 ? extraKinds(columns) : [])]])
+}
 
 export const PERIODS = { all: "All dates", month: "Month", quarter: "Quarter", year: "Year", range: "Range of months" } as const
 export type Period = keyof typeof PERIODS
@@ -96,7 +110,7 @@ const avg = (amt: number, n: number) => (n ? Math.round(amt / n) : null)
 function grouped(kind: TableKind, head: string, lines: [string, number, number][], rows: Voucher[], extra?: Col): Table {
   const sum = total(rows), n = rows.length
   return {
-    kind, title: REPORTS[kind],
+    kind, title: titleOf(kind),
     cols: [{ head: "No.", fmt: "int", w: 0.06 }, { head, fmt: "text", w: extra ? 0.24 : 0.38 }, { head: "Vouchers", fmt: "int", w: 0.1 },
       { head: "Amount", fmt: "peso", w: 0.18 }, { head: "Average", fmt: "peso", w: 0.16 }, { head: "% of total", fmt: "pct", w: 0.12 },
       ...(extra ? [extra] : [])],
@@ -106,7 +120,7 @@ function grouped(kind: TableKind, head: string, lines: [string, number, number][
 }
 
 /** Indicator · this period · prior period · change. Without a prior period, just the value. */
-function kpis(rows: Voucher[], prior: Voucher[] | null, scope: Scope, month: string): Table {
+function kpis(rows: Voucher[], prior: Voucher[] | null, scope: Scope, month: string, has: (f: Field) => boolean): Table {
   const stats = (rs: Voucher[], from = scope.from, to = scope.to) => {
     const sum = total(rs), n = rs.length
     const payees = group(rs, LABELS.payee[1])
@@ -122,8 +136,8 @@ function kpis(rows: Voucher[], prior: Voucher[] | null, scope: Scope, month: str
       ["Average per month", "peso", avg(sum, nMonths)],
       ["Number of payees", "int", payees.length],
       ["Top 5 payees, share of amount", "pct", share(payees.slice(0, 5).reduce((s, p) => s + p[2], 0), sum)],
-      ["Vouchers with check #", "pct", share(rs.filter((r) => r.check_number.trim()).length, n)],
-      ["Vouchers verified", "pct", share(rs.filter(isVerified).length, n)],
+      ...(has("check_number") ? [["Vouchers with check #", "pct", share(rs.filter((r) => r.check_number.trim()).length, n)]] : []),
+      ...(has("status") ? [["Vouchers verified", "pct", share(rs.filter(isVerified).length, n)]] : []),
       ["Exception rate (vouchers for review)", "pct", share(flagged.length, n)],
       ["Amount under exception", "peso", total(flagged)],
     ] as [string, Fmt, number | null][]
@@ -156,8 +170,8 @@ export function fmtCell(v: Cell, fmt: Fmt): string {
   return v.toLocaleString("en-US")
 }
 
-function table(kind: TableKind, rows: Voucher[], prior: Voucher[] | null, scope: Scope, month: string): Table {
-  if (kind === "kpi") return kpis(rows, prior, scope, month)
+function table(kind: TableKind, rows: Voucher[], prior: Voucher[] | null, scope: Scope, month: string, has: (f: Field) => boolean): Table {
+  if (kind === "kpi") return kpis(rows, prior, scope, month, has)
   if (kind === "monthly") {
     // Every month in the period, oldest first, zero months included; undated vouchers last.
     const ms = scope.from ? Array.from({ length: span(scope.from, scope.to) }, (_, i) => monthsBack(scope.to, span(scope.from, scope.to) - 1 - i)) : months(rows).reverse()
@@ -193,20 +207,28 @@ function table(kind: TableKind, rows: Voucher[], prior: Voucher[] | null, scope:
       foot: [`Total · ${rows.length} vouchers`, "", "", "", "", "", "", total(rows)],
     }
   }
-  const [head, key] = LABELS[kind]
+  const [head, key]: [string, (r: Voucher) => string] = kind.startsWith("x:")
+    ? [kind.slice(2), (r) => r.extra?.[kind]?.trim() || NOT_SET]
+    : LABELS[kind as keyof typeof LABELS]
   // Largest first; "Not set" last, as unclassified lines go at the foot of a schedule.
   const lines = group(rows, key).sort((a, b) => Number(a[0] === NOT_SET) - Number(b[0] === NOT_SET))
   return grouped(kind, head, lines, rows)
 }
 
 /** The report's choices from the URL, every voucher in scope, and its tables (several for the full report). */
-export function buildReport(rows: Voucher[], p: URLSearchParams, today: string) {
-  const kind: Kind = (p.get("report") ?? "") in REPORTS ? (p.get("report") as Kind) : "summary"
+export function buildReport(rows: Voucher[], p: URLSearchParams, today: string, columns: Column[]) {
+  const kinds = clustersFor(columns).flatMap(([, ks]) => ks)
+  const kind: Kind = kinds.includes(p.get("report") as Kind) ? (p.get("report") as Kind) : "summary"
+  const has = (f: Field) => columns.some((c) => c.field === f)
+  // Generated sections sit after the three fixed breakdowns, so the full report for the current sheet is unchanged.
+  const fixed = SUMMARY.filter((k) => kinds.includes(k))
+  const at = Math.max(0, ...(["category", "area", "program"] as const).map((k) => fixed.indexOf(k))) + 1
+  const summary = [...fixed.slice(0, at), ...extraKinds(columns), ...fixed.slice(at)]
   const scope = readScope(p, months(rows)[0] ?? today.slice(0, 7))
   const area = p.get("area") ?? ""
   const inArea = rows.filter((r) => !area || label(r, "trade_area") === area)
   const scoped = inArea.filter((r) => inRange(r, scope.from, scope.to))
   const prior = scope.prior && inArea.filter((r) => inRange(r, scope.prior!.from, scope.prior!.to))
-  const tables = (kind === "summary" ? SUMMARY : [kind]).map((k) => table(k, scoped, prior, scope, today.slice(0, 7)))
+  const tables = (kind === "summary" ? summary : [kind as TableKind]).map((k) => table(k, scoped, prior, scope, today.slice(0, 7), has))
   return { kind, scope, area, scoped, tables }
 }

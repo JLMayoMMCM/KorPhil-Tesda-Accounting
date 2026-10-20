@@ -16,32 +16,32 @@ import { Kbd } from "@/components/ui/kbd"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
-import { FIELD_LABELS, FOR_REVIEW, VERIFIED, type Field as FieldName } from "@/lib/ledger"
+import { FOR_REVIEW, VERIFIED } from "@/lib/ledger"
+import type { Column } from "@/lib/sheet-config"
 
 type Props = {
   row: number | null // null = new voucher
-  initial: Record<FieldName, string>
+  initial: Record<string, string> // by column key
+  columns: Column[] // the sheet's columns in sheet order; the form is built from them
   heading: string
   status: React.ReactNode
   source: string
-  options: { trade_area: string[]; diploma_st_assessment: string[]; category: string[] }
   closeUrl: string
 }
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/
 
-export function VoucherPanel({ row, initial, heading, status, source, options, closeUrl }: Props) {
+export function VoucherPanel({ row, initial, columns, heading, status, source, closeUrl }: Props) {
   const router = useRouter()
   const { run, setDirty } = useUI()
   const [changed, setChanged] = React.useState<string[]>([])
   const [error, setError] = React.useState("")
   React.useEffect(() => () => setDirty(""), [setDirty]) // closing the panel drops the guard
+  const shown = columns.filter((c) => c.visibility !== "hidden")
 
   const onInput = (e: React.FormEvent<HTMLFormElement>) => {
     const data = new FormData(e.currentTarget)
-    const list = (Object.keys(FIELD_LABELS) as FieldName[])
-      .filter((f) => String(data.get(f) ?? "") !== initial[f])
-      .map((f) => FIELD_LABELS[f])
+    const list = shown.filter((c) => c.visibility === "shown" && String(data.get(c.key) ?? "") !== (initial[c.key] ?? "")).map((c) => c.label)
     setChanged(list)
     setDirty(list.length ? `Changed: ${list.join(", ")}` : "")
   }
@@ -49,7 +49,7 @@ export function VoucherPanel({ row, initial, heading, status, source, options, c
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const data = new FormData(e.currentTarget)
-    const result = await run("Saving to the sheet…", () => saveVoucher(row, data), { inlineError: true })
+    const result = await run("Saving to the sheet…", () => saveVoucher(row, data, initial.dv_no), { inlineError: true })
     if (!result.ok) return setError(result.message)
     setError("")
     setChanged([])
@@ -58,25 +58,34 @@ export function VoucherPanel({ row, initial, heading, status, source, options, c
     if (row === null) router.push(closeUrl, { scroll: false })
   }
 
-  const text = (name: FieldName, props: React.ComponentProps<typeof Input> = {}, wide = false) => (
-    <Field className={wide ? "col-span-2" : undefined}>
-      <FieldLabel htmlFor={name}>{FIELD_LABELS[name]}</FieldLabel>
-      <Input id={name} name={name} defaultValue={initial[name]} {...props} />
-    </Field>
-  )
-
-  // The sheet's Selection List; a value already in the row stays selectable even if the list dropped it.
-  const pick = (name: keyof Props["options"], wide = false) => {
-    const choices = options[name].includes(initial[name]) || !initial[name] ? options[name] : [initial[name], ...options[name]]
-    return (
-      <Field className={wide ? "col-span-2" : undefined}>
-        <FieldLabel htmlFor={name}>{FIELD_LABELS[name]}</FieldLabel>
-        <NativeSelect id={name} name={name} defaultValue={initial[name]} className="w-full">
+  // One input per column, chosen by its type; labels are the sheet's own header text.
+  const input = (c: Column) => {
+    const value = initial[c.key] ?? ""
+    const common = { id: c.key, name: c.key, defaultValue: value, disabled: c.visibility === "readonly" }
+    if (c.field === "status") return (
+      <NativeSelect {...common} className="w-full">
+        <NativeSelectOption value={FOR_REVIEW}>{FOR_REVIEW}</NativeSelectOption>
+        <NativeSelectOption value={VERIFIED}>{VERIFIED}</NativeSelectOption>
+      </NativeSelect>
+    )
+    if (c.type === "dropdown") {
+      // A value already in the row stays selectable even if the list dropped it.
+      const choices = c.options.includes(value) || !value ? c.options : [value, ...c.options]
+      return (
+        <NativeSelect {...common} className="w-full">
           <NativeSelectOption value="">Not set</NativeSelectOption>
           {choices.map((v) => <NativeSelectOption key={v} value={v}>{v}</NativeSelectOption>)}
         </NativeSelect>
-      </Field>
+      )
+    }
+    if (c.type === "money") return (
+      <InputGroup>
+        <InputGroupAddon><InputGroupText>₱</InputGroupText></InputGroupAddon>
+        <InputGroupInput {...common} inputMode="decimal" required={c.field === "gross_amount"} />
+      </InputGroup>
     )
+    if (c.type === "long") return <Textarea {...common} rows={3} />
+    return <Input {...common} type={c.type === "date" && (!value || ISO.test(value)) ? "date" : "text"} required={c.field === "dv_no"} />
   }
 
   const note = row === null
@@ -104,31 +113,12 @@ export function VoucherPanel({ row, initial, heading, status, source, options, c
       )}
 
       <FieldGroup className="grid grid-cols-2 gap-4">
-        {text("dv_no", { required: true })}
-        {text("dv_date", { type: !initial.dv_date || ISO.test(initial.dv_date) ? "date" : "text" })}
-        {text("payee", {}, true)}
-        <Field>
-          <FieldLabel htmlFor="gross_amount">Gross amount</FieldLabel>
-          <InputGroup>
-            <InputGroupAddon><InputGroupText>₱</InputGroupText></InputGroupAddon>
-            <InputGroupInput id="gross_amount" name="gross_amount" defaultValue={initial.gross_amount} inputMode="decimal" required />
-          </InputGroup>
-        </Field>
-        {text("check_number")}
-        {pick("trade_area")}
-        {pick("category")}
-        {pick("diploma_st_assessment", true)}
-        <Field className="col-span-2">
-          <FieldLabel htmlFor="status">{FIELD_LABELS.status}</FieldLabel>
-          <NativeSelect id="status" name="status" defaultValue={initial.status} className="w-full">
-            <NativeSelectOption value={FOR_REVIEW}>{FOR_REVIEW}</NativeSelectOption>
-            <NativeSelectOption value={VERIFIED}>{VERIFIED}</NativeSelectOption>
-          </NativeSelect>
-        </Field>
-        <Field className="col-span-2">
-          <FieldLabel htmlFor="particulars">Particulars</FieldLabel>
-          <Textarea id="particulars" name="particulars" rows={3} defaultValue={initial.particulars} />
-        </Field>
+        {shown.map((c) => (
+          <Field key={c.key} className={c.type === "long" || c.field === "payee" ? "col-span-2" : undefined}>
+            <FieldLabel htmlFor={c.key}>{c.label}{c.visibility === "readonly" && <span className="font-normal text-muted-foreground"> · read-only</span>}</FieldLabel>
+            {input(c)}
+          </Field>
+        ))}
       </FieldGroup>
 
       <div className="flex flex-col gap-1 text-sm">

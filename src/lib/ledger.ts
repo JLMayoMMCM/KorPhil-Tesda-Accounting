@@ -43,7 +43,8 @@ export type Tab = keyof typeof TABS
 
 export const NOT_SET = "Not set"
 
-export type RawVoucher = Record<Field, string> & { sheet_row: number }
+// extra: columns the app has no role for (R5), by column key ("x:" + header text).
+export type RawVoucher = Record<Field, string> & { sheet_row: number; extra?: Record<string, string> }
 export type Voucher = RawVoucher & {
   amount: number // centavos
   dv: string | null
@@ -108,8 +109,8 @@ export const longDate = (iso: string) => `${longMonth(iso)} ${iso.slice(8, 10)},
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 
-/** Parse each row and run the review checks. Newest DV date first; undated rows last. */
-export function enrich(rows: RawVoucher[]): Voucher[] {
+/** Parse each row and run the review checks (minus those for columns the sheet lacks). Newest DV date first; undated rows last. */
+export function enrich(rows: RawVoucher[], missing: Field[] = []): Voucher[] {
   const seen = new Map<string, number>()
   for (const r of rows) if (r.dv_no.trim()) seen.set(r.dv_no.trim(), (seen.get(r.dv_no.trim()) ?? 0) + 1)
   const out = rows.map((raw): Voucher => {
@@ -120,8 +121,8 @@ export function enrich(rows: RawVoucher[]): Voucher[] {
       ["duplicate_dv", (seen.get(raw.dv_no.trim()) ?? 0) > 1],
       ["no_date", !dv],
       ["no_amount", !parsed],
-      ["no_check", !raw.check_number.trim()],
-      ["no_area", !raw.trade_area.trim()],
+      ["no_check", !missing.includes("check_number") && !raw.check_number.trim()],
+      ["no_area", !missing.includes("trade_area") && !raw.trade_area.trim()],
     ]
     // A verified row has had its blanks signed off; only a duplicate DV # still flags it.
     const verified = isVerified(raw)
@@ -189,7 +190,10 @@ export function values(rows: Voucher[], field: Field): string[] {
 export const months = (rows: Voucher[]) =>
   [...new Set(rows.map((r) => r.month).filter(Boolean))].sort().reverse()
 
-/** Rows matching the voucher-list query params (tab, area, month, year, issue — also "none" / "any" — q, sel). */
+/** A row's label in any column by key: a field, or an extra column ("x:" + header). */
+export const labelOf = (r: RawVoucher, key: string) => (key in FIELD_LABELS ? r[key as Field] : r.extra?.[key] ?? "").trim() || NOT_SET
+
+/** Rows matching the voucher-list query params (tab, area, col + is, month, year, issue — also "none" / "any" — q, sel). */
 export function filterRows(rows: Voucher[], params: URLSearchParams): Voucher[] {
   const tab = params.get("tab") ?? "all"
   const q = (params.get("q") ?? "").trim().toLowerCase()
@@ -198,9 +202,11 @@ export function filterRows(rows: Voucher[], params: URLSearchParams): Voucher[] 
   const month = params.get("month")
   const year = params.get("year")
   const issue = params.get("issue")
+  const col = params.get("col"), is = params.get("is")
   return rows.filter((r) =>
     inTab(r, tab) &&
     (!area || label(r, "trade_area") === area) &&
+    (!col || is === null || labelOf(r, col) === is) &&
     (!month || r.month === month) &&
     (!year || r.month.startsWith(year + "-")) &&
     (!issue || (issue === "none" ? !r.issues.length : issue === "any" ? r.issues.length > 0 : r.issues.includes(issue as Issue))) &&

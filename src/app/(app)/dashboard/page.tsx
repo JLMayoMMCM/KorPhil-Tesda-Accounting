@@ -10,7 +10,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Popover, PopoverContent, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover"
 import { getData } from "@/lib/data"
-import { byIssue, group, isVerified, ISSUES, label, longMonth, monthLabel, months, monthsBack, peso, qs, total, yearThrough, type Voucher } from "@/lib/ledger"
+import { byIssue, group, isVerified, ISSUES, label, labelOf, longMonth, monthLabel, months, monthsBack, peso, qs, total, yearThrough, type Voucher } from "@/lib/ledger"
 import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = { title: "Dashboard" }
@@ -40,10 +40,10 @@ const change = (now: number, before: number, against: string) => {
 
 /** Overview of the whole sheet: how much is verified, what blocks the rest, and the shape of the money. */
 export default async function Dashboard({ searchParams }: PageProps<"/dashboard">) {
-  const { rows: everything, error, today } = await getData()
+  const { rows: everything, error, today, columns } = await getData()
   // Scope: one calendar year (Jan–Dec, default this year) or "all". Undated vouchers only show under All years.
   const years = [...new Set([today.slice(0, 4), ...months(everything).map((m) => m.slice(0, 4))])].sort().reverse()
-  const { year: asked, month: askedMonth } = await searchParams
+  const { year: asked, month: askedMonth, by: askedBy } = await searchParams
   const year = typeof asked === "string" && (asked === "all" || years.includes(asked)) ? asked : today.slice(0, 4)
   // Month under comparison: the picked one, else the current month (December for a past year). All years reads the current month.
   const mm = typeof askedMonth === "string" && MONTH_NUMBERS.includes(askedMonth) ? askedMonth : year === today.slice(0, 4) ? today.slice(5, 7) : "12"
@@ -137,8 +137,13 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   const reviewData: Point[] = byIssue(rows).map(([i, list]) => ({
     label: ISSUES[i], tip: `${ISSUES[i]} · ${vouchers(list.length)}`, value: total(list), href: link({ issue: i }), color: "var(--destructive)",
   }))
-  const areas = group(rows, (r) => label(r, "trade_area")).map(([name, n, amt]) => {
-    const list = rows.filter((r) => label(r, "trade_area") === name)
+  // The per-group summary works for any dropdown column (trade area by default); a new one in the sheet appears as a choice.
+  const groupings = columns.filter((c) => c.type === "dropdown" && c.field !== "status" && c.visibility !== "hidden")
+  const by = groupings.find((c) => c.key === askedBy) ?? groupings.find((c) => c.field === "trade_area") ?? groupings[0]
+  const keyOf = (r: Voucher) => (by ? labelOf(r, by.key) : "")
+  const filter = (name: string): Record<string, string> => (by?.field === "trade_area" ? { area: name } : { col: by?.key ?? "", is: name })
+  const areas = group(rows, keyOf).map(([name, n, amt]) => {
+    const list = rows.filter((r) => keyOf(r) === name)
     const done = list.filter(isVerified)
     return { name, n, amt, done: done.length, doneAmt: total(done) }
   })
@@ -156,8 +161,8 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
     }
   }
   const areaStats: AreaStat[] = [
-    statFor("All trade areas", rows, link({ tab: "pending" })),
-    ...areas.map((a) => statFor(a.name, rows.filter((r) => label(r, "trade_area") === a.name), link({ tab: "pending", area: a.name }))),
+    statFor(`All · ${by?.label ?? ""}`, rows, link({ tab: "pending" })),
+    ...areas.map((a) => statFor(a.name, rows.filter((r) => keyOf(r) === a.name), link({ tab: "pending", ...filter(a.name) }))),
   ]
 
   // Summary sentences: each a fact the page also shows.
@@ -314,9 +319,22 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
       </div>
       </section>
 
-      <ChartCard title="Summary per trade area" description="Pick an area to see its figures, payees, categories and programs" className={cn(SNAP, SCREEN_MIN)}>
-        <AreaSummary stats={areaStats} />
-      </ChartCard>
+      {by && (
+        <ChartCard title={`Summary per ${by.label.toLowerCase()}`} description="Pick one to see its figures, payees, categories and programs" className={cn(SNAP, SCREEN_MIN)}>
+          {groupings.length > 1 && (
+            <nav aria-label="Group by" className="mb-3 flex flex-wrap items-center gap-1 print:hidden">
+              <span className="mr-1 text-sm text-muted-foreground">Group by</span>
+              {groupings.map((c) => (
+                <Button key={c.key} size="sm" variant={c.key === by.key ? "secondary" : "ghost"} aria-current={c.key === by.key ? "page" : undefined}
+                  render={<Link href={`/dashboard/?${new URLSearchParams({ ...(year === today.slice(0, 4) ? {} : { year }), ...(askedMonth ? { month: mm } : {}), by: c.key })}`} scroll={false} />} nativeButton={false}>
+                  {c.label}
+                </Button>
+              ))}
+            </nav>
+          )}
+          <AreaSummary key={by.key} stats={areaStats} />
+        </ChartCard>
+      )}
     </div>
   )
 }

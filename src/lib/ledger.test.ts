@@ -2,7 +2,8 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { byIssue, DV_FORMAT, enrich, nextDvNo, filterRows, inTab, median, monthsBack, paginate, parseAmount, parseDate, peso, qs, serialDate, sheetDate, total, yearThrough, type RawVoucher } from "./ledger.ts"
+import { byIssue, DV_FORMAT, enrich, nextDvNo, filterRows, inTab, labelOf, median, monthsBack, paginate, parseAmount, parseDate, peso, qs, serialDate, sheetDate, total, yearThrough, type RawVoucher } from "./ledger.ts"
+import { classifyRow, colLetter, detectLayout, fixedLayout, HEADERS, inferType, layoutDiff, META, normalize, readSheet, savedFrom } from "./sheet-config.ts"
 
 let n = 5
 const row = (dv_no: string, dv_date: string, amount = "1,000.50", check = "3477204", area = "ADMIN"): RawVoucher => ({
@@ -81,4 +82,116 @@ test("paginate", () => {
   assert.deepEqual(paginate([rows(1), rows(2)], { ...h, start: 0 }), [[{ block: 0, from: 0, to: 1 }, { block: 1, from: 0, to: 2 }]])
   // A wrapped (taller) row moves to the next page whole.
   assert.deepEqual(paginate([[10, 10, 10, 10, 30]], h), [[{ block: 0, from: 0, to: 4 }], [{ block: 0, from: 4, to: 5 }]])
+})
+
+test("sheet layout detection", () => {
+  assert.equal(normalize(" DV No. "), "dv no")
+  assert.equal(normalize("DV #"), "dv no")
+  assert.equal(normalize("DV Number"), "dv no")
+  assert.equal(normalize("Diploma / ST / Assessment"), "diploma st assessment")
+  assert.deepEqual([0, 11, 25, 26, 27, 51, 52, 701, 702].map(colLetter), ["A", "L", "Z", "AA", "AB", "AZ", "BA", "ZZ", "AAA"])
+
+  const none = { headerRow: null, firstRow: null }
+  const header = ["DV Date", "", "DV No.", "Payee", "Particulars", "Gross Amount", "", "Check #", "Trade Area", "Diploma/ST/Assessment", "Category", "Status"]
+  const exp = [["KORPHIL DISBURSEMENTS 2026"], header, ["", "", "", "", "", "", "", "", "", "", "", ""], ["", "", "", "", "", 25635598.86], [], [46031, "", "06-2026-01-00001", "ACME", "Supplies", 1000.5]]
+  const [layout, error] = detectLayout(exp, none)
+  assert.equal(error, null)
+  assert.equal(layout!.headerRow, 2)
+  assert.equal(layout!.firstRow, 3)
+  assert.deepEqual(layoutDiff(layout!, fixedLayout()), []) // same columns as the fixed layout
+  assert.deepEqual(layout!.missing, [])
+
+  // Three title rows added above, a column inserted after Payee, an unknown "Remarks" column and a two-line header.
+  const moved = [["Title"], ["Subtitle"], ["", "", "", "", "", "Check"], ["DV date", "DV #", "Payee", "Remarks", "Gross", "Number"]]
+  const [m] = detectLayout(moved, none)
+  assert.equal(m!.headerRow, 4)
+  assert.deepEqual(m!.columns, { dv_date: 0, dv_no: 1, payee: 2, gross_amount: 4, check_number: 5 }) // "Number" + "Check" above
+  assert.deepEqual(m!.extras, [{ col: 3, text: "Remarks" }])
+  assert.deepEqual(detectLayout([["DV #", "Check No"], ["", "Number"]], none)[1], "Header row 1 has no column for DV date, Gross amount.")
+  assert.equal(detectLayout([["Gross"], ["DV #", "Date", "Amount"]], { headerRow: 2, firstRow: 6 })[0]!.firstRow, 6) // overrides
+  assert.match(detectLayout([["a"], ["b"]], none)[1]!, /No header row/)
+
+  const cols = fixedLayout().columns
+  const kind = (row: (string | number)[]) => classifyRow(row, cols).kind
+  assert.equal(kind([46031, "", "06-2026-01-00001", "ACME", "Supplies", 1000.5]), "voucher")
+  assert.equal(kind(["", "", "", "", "", 25635598.86]), "skip") // totals row
+  assert.equal(classifyRow(["", "", "", "", "", 25635598.86], cols).reason, "Totals or subtotal")
+  assert.equal(kind(["", "", "06-2026-01-00099", "", "", ""]), "voucher") // DV # in format alone
+  assert.equal(kind(["", "", "DV-17", "", "", 500]), "voucher") // sparse real voucher stays a voucher
+  assert.equal(kind(["9/3/2026", "", "", "", "", "1,250.00"]), "voucher") // dates and amounts typed as text
+  assert.equal(kind(["", "", "06-YYYY-MM-00000", "Payee", "", 1]), "skip") // placeholder
+  assert.equal(kind([46031, "", "", "e.g. ACME Corp", "", 1]), "skip") // example row
+  assert.equal(kind(["JANUARY 2026"]), "skip") // month divider
+  assert.equal(kind(["", "", "", "", "", "one thousand", "", "x", "y"]), "skip") // amount written as text
+  assert.equal(kind(["", "", "", "", "see note", "", "", "123", "ADMIN"]), "unsure")
+  assert.equal(kind(["", "", ""]), "skip")
+})
+
+test("reading the sheet through a layout", () => {
+  const header = ["DV Date", "", "DV No.", "Payee", "Particulars", "Gross Amount", "", "Check #", "Trade Area", "Diploma/ST/Assessment", "Category", "Status"]
+  const v = (dv: string, extra: (string | number)[] = []) => [46031, "", dv, "ACME", "Supplies", 1000, "", "123", "ADMIN", "NC II", "Ops", "", ...extra]
+  const exp = [["TITLE"], header, [], ["", "", "", "", "", 2000], v("06-2026-01-00001"), ["JANUARY"], v("06-2026-01-00002"), ["", "", "", "", "", 2000], []]
+  const lists = [{ header: "Trade Area", values: ["ADMIN", "AUTO"] }, { header: "Funding Source", values: ["GAA", "STEP"] }]
+
+  const fixed = readSheet(exp, { lists, fixed: true })
+  assert.equal(fixed.source, "fixed")
+  assert.deepEqual(fixed.vouchers, [5, 6, 7, 8]) // pre-R5: every non-blank row from row 5
+  const d = readSheet(exp, { lists })
+  assert.equal(d.source, "detected")
+  assert.deepEqual(d.vouchers, [5, 7]) // month divider and totals skipped
+  assert.deepEqual(d.skipped.map((r) => [r.row, r.reason]), [[4, "Totals or subtotal"], [6, "Text in only one or two cells"], [8, "Totals or subtotal"]])
+  assert.equal(d.nextRow, 9) // the totals row below the last voucher is never written over
+  const type = (key: string) => d.columns.find((c) => c.key === key)?.type
+  assert.deepEqual([type("dv_date"), type("gross_amount"), type("particulars"), type("trade_area"), type("category")], ["date", "money", "long", "dropdown", "dropdown"])
+  assert.deepEqual(d.columns.find((c) => c.key === "trade_area")!.options, ["ADMIN", "AUTO"]) // matched by list header
+  assert.deepEqual(d.columns.find((c) => c.key === "category")!.options, ["Ops"]) // no list: values already in the sheet
+
+  // A column added in the sheet: "Remarks" (text) and "Funding Source" (dropdown, from its Selection List column).
+  const wider = exp.map((r, i) => (i === 1 ? [...r, "Remarks", "Funding Source"] : r.length > 6 ? [...r, ...Array(12 - r.length).fill(""), "ok", "GAA"] : r))
+  const w = readSheet(wider, { lists })
+  assert.deepEqual(w.columns.slice(-2).map((c) => [c.key, c.type, c.options]), [["x:Remarks", "text", []], ["x:Funding Source", "dropdown", ["GAA", "STEP"]]])
+
+  // Without a Check # column: no column, and enrich stops flagging it.
+  const noCheck = readSheet(exp.map((r, i) => (i === 1 ? r.map((h) => (h === "Check #" ? "" : h)) : r)), { lists })
+  assert.ok(noCheck.layout.missing.includes("check_number"))
+  const raw = { ...Object.fromEntries(Object.keys(HEADERS).map((f) => [f, ""])), dv_no: "X", dv_date: "1/1/2026", gross_amount: "5", trade_area: "A", sheet_row: 5 } as RawVoucher
+  assert.deepEqual(enrich([raw])[0].issues, ["no_check"])
+  assert.deepEqual(enrich([raw], ["check_number"])[0].issues, [])
+
+  // The Selection List read by position (A, B, C) when no list header matches a column.
+  const old = readSheet(exp, { lists: [{ header: "x", values: ["T"] }, { header: "y", values: ["D"] }, { header: "z", values: ["C"] }] })
+  assert.deepEqual(["trade_area", "diploma_st_assessment", "category"].map((k) => old.columns.find((c) => c.key === k)!.options), [["T"], ["D"], ["C"]])
+})
+
+test("saved settings", () => {
+  const meta = [
+    { metadataKey: META.layout, metadataValue: JSON.stringify({ by: "a@b.c", at: "2026-10-21T00:00:00Z" }) },
+    { metadataKey: META.header, location: { dimensionRange: { sheetId: 7, dimension: "ROWS", startIndex: 4 } } }, // moved down by 3 inserted title rows
+    { metadataKey: META.ignore, location: { dimensionRange: { sheetId: 7, dimension: "ROWS", startIndex: 8 } } },
+    { metadataKey: META.column, metadataValue: JSON.stringify({ role: "gross_amount", visibility: "readonly" }), location: { dimensionRange: { sheetId: 7, dimension: "COLUMNS", startIndex: 2 } } },
+    { metadataKey: META.ignore, location: { dimensionRange: { sheetId: 99, dimension: "ROWS", startIndex: 1 } } }, // another tab
+  ]
+  const saved = savedFrom(meta, 7)!
+  assert.deepEqual({ ...saved }, { headerRow: 5, ignored: [9], columns: { 2: { role: "gross_amount", visibility: "readonly" } }, by: "a@b.c", at: "2026-10-21T00:00:00Z" })
+  assert.equal(savedFrom(meta.slice(1), 7), null) // no top-level record: nothing saved
+
+  // Header text the app doesn't know, mapped by hand; a dummy row that looks real, ignored by hand.
+  const values = [["A"], ["B"], ["C"], ["D"], ["Fecha", "Numero", "Monto", "Tag"], [46031, "DV-1", 10, "x"], [46032, "DV-2", 20, "y"], [46033, "DV-3", 30, "z"], [46034, "SAMPLE ROW", 40, "w"]]
+  assert.match(detectLayout(values)[1]!, /No header row|no column/)
+  const m = readSheet(values, { saved: { ...saved, columns: { ...saved.columns, 0: { role: "dv_date" }, 1: { role: "dv_no" } } } })
+  assert.equal(m.source, "saved")
+  assert.deepEqual(m.layout.columns, { dv_date: 0, dv_no: 1, gross_amount: 2 })
+  assert.deepEqual(m.vouchers, [6, 7, 8]) // row 9 ignored
+  assert.deepEqual(m.columns.map((c) => [c.key, c.visibility]), [["dv_date", "shown"], ["dv_no", "shown"], ["gross_amount", "readonly"], ["x:Tag", "shown"]])
+  assert.equal(inferType("Remarks", ["a", "b"], false), "text")
+  assert.equal(inferType("Released on date", [46031], false), "date")
+  assert.equal(inferType("Retention", [1, 2, ""], false), "money")
+  assert.equal(inferType("Notes", ["x".repeat(80)], false), "long")
+})
+
+test("generic column filter", () => {
+  const rs = enrich([{ ...row("E1", "1/1/2026"), extra: { "x:Fund": "GAA" } }, { ...row("E2", "1/1/2026"), extra: { "x:Fund": "" } }])
+  assert.equal(labelOf(rs.find((r) => r.dv_no === "E2")!, "x:Fund"), "Not set")
+  assert.deepEqual(filterRows(rs, new URLSearchParams("col=x:Fund&is=GAA")).map((r) => r.dv_no), ["E1"])
+  assert.deepEqual(filterRows(rs, new URLSearchParams("col=trade_area&is=ADMIN")).length, 2)
 })
