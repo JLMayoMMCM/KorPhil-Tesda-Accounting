@@ -229,6 +229,21 @@ export function toParams(sp: Record<string, string | string[] | undefined>): URL
   return q
 }
 
+// DV # as the sheet writes it: 06-YYYY-MM-NNNNN, the sequence running across the year (00010 Jan -> 00659 Aug).
+// ponytail: the office has no written rule; this regex and nextDvNo are the only places that encode it. Confirm with accounting.
+export const DV_FORMAT = /^06-(\d{4})-(0[1-9]|1[0-2])-(\d{5})$/
+
+/** Next free DV # for a voucher dated iso: month from iso, sequence = that year's highest (used + taken) + 1. */
+export function nextDvNo(used: Iterable<string>, iso: string, taken: Iterable<string> = []): string {
+  const year = iso.slice(0, 4)
+  let max = 0
+  for (const dv of [...used, ...taken]) {
+    const m = DV_FORMAT.exec(dv.trim())
+    if (m && m[1] === year) max = Math.max(max, Number(m[3]))
+  }
+  return `06-${year}-${iso.slice(5, 7)}-${String(max + 1).padStart(5, "0")}`
+}
+
 export type Chunk = { block: number; from: number; to: number }
 /**
  * Splits tables across fixed-height pages. Each block lists its row heights (body rows, then any total

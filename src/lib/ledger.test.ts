@@ -2,7 +2,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { byIssue, enrich, filterRows, inTab, median, monthsBack, paginate, parseAmount, parseDate, peso, qs, serialDate, sheetDate, total, yearThrough, type RawVoucher } from "./ledger.ts"
+import { byIssue, DV_FORMAT, enrich, nextDvNo, filterRows, inTab, median, monthsBack, paginate, parseAmount, parseDate, peso, qs, serialDate, sheetDate, total, yearThrough, type RawVoucher } from "./ledger.ts"
 
 let n = 5
 const row = (dv_no: string, dv_date: string, amount = "1,000.50", check = "3477204", area = "ADMIN"): RawVoucher => ({
@@ -59,6 +59,15 @@ test("dashboard figures", () => {
   assert.equal(monthsBack("2026-01", 1), "2025-12")
   assert.equal(total(yearThrough(rs, 2026, "10")), 40000) // Jan–Oct 2026 leaves out November
   assert.equal(total(yearThrough(rs, 2025, "10")), 20000) // the same window a year earlier
+})
+
+test("nextDvNo", () => {
+  const used = ["06-2026-01-00010", "06-2026-08-00659", " 06-2025-12-00900 ", "06-2026-13-99999", "junk"]
+  assert.equal(nextDvNo(used, "2026-03-31"), "06-2026-03-00660") // year's max, month from the date; bad month ignored
+  assert.equal(nextDvNo(used, "2026-08-17", ["06-2026-08-00660"]), "06-2026-08-00661") // numbers handed out this session
+  assert.equal(nextDvNo(used, "2025-12-01"), "06-2025-12-00901") // trimmed; other years don't count
+  assert.equal(nextDvNo([], "2027-01-02"), "06-2027-01-00001")
+  assert.ok(DV_FORMAT.test("06-2026-08-00659") && !DV_FORMAT.test("06-2026-8-659"))
 })
 
 test("paginate", () => {

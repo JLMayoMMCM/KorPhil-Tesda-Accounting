@@ -148,6 +148,11 @@ export function setStatuses(token: string | null, sheetRows: number[], status: s
   })
 }
 
+/** Set column C (DV #) on one row, as plain text. */
+export function setDvNo(token: string | null, sheetRow: number, dvNo: string) {
+  return write(token, valuesUrl(`${SHEET_RANGE}!C${sheetRow}`, "?valueInputOption=RAW"), "PUT", { values: [[dvNo]] })
+}
+
 /** Overwrite one data row (A:L). */
 export function updateVoucherRow(token: string | null, sheetRow: number, fields: Record<Field, string>) {
   return write(token, valuesUrl(`${SHEET_RANGE}!A${sheetRow}:${LAST_COLUMN}${sheetRow}`, "?valueInputOption=USER_ENTERED"), "PUT",
