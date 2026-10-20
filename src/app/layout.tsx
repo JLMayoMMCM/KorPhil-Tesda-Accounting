@@ -11,7 +11,7 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 export const metadata: Metadata = {
   title: { template: "%s · KorPhil-TESDA", default: "Disbursements · KorPhil-TESDA" },
   description: "Disbursement voucher workspace for the Korea-Philippines Vocational Training Center.",
-  icons: { icon: "/logo.webp" },
+  icons: { icon: "/tesda_korphil_logo.png" },
 }
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

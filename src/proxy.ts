@@ -34,5 +34,5 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   // Everything except sign-in routes, Next internals and public files.
-  matcher: ["/((?!login|auth/callback|_next/|favicon.ico|logo.webp).*)"],
+  matcher: ["/((?!login|auth/callback|_next/|favicon.ico|.*\\.png$).*)"],
 }

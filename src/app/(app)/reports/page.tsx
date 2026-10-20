@@ -3,100 +3,84 @@ import type { Metadata } from "next"
 import Form from "next/form"
 import Image from "next/image"
 import Link from "next/link"
-import type { ReactNode } from "react"
 
 import { AutoSubmitSelect } from "@/components/auto-submit"
-import { Totals } from "@/components/charts"
 import { PrintButton } from "@/components/print-button"
 import { Button } from "@/components/ui/button"
 import { NativeSelectOption } from "@/components/ui/native-select"
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getData } from "@/lib/data"
-import { ISSUES, monthLabel, months, paginate, peso, qs, toParams, total, values } from "@/lib/ledger"
-import { buildReport, REPORTS, type Kind, type Part } from "@/lib/reports"
+import { monthLabel, months, paginate, qs, todayManila, toParams, values } from "@/lib/ledger"
+import { buildReport, CLUSTERS, clusterOf, fmtCell, PERIODS, REPORTS, type Cell, type Col } from "@/lib/reports"
 import { fullName } from "@/lib/session"
 
 export const metadata: Metadata = { title: "Reports" }
 
-/** Paper sizes: label, CSS width, CSS height, height in px (96 dpi). "Long" is PH long bond (8.5 × 13 in). */
+/** Paper sizes: label, CSS width, CSS height, height and width in px (96 dpi). "Long" is PH long bond (8.5 × 13 in). */
 const PAPERS = {
-  short: ["Short (8.5 × 11 in)", "8.5in", "11in", 1056],
-  long: ["Long (8.5 × 13 in)", "8.5in", "13in", 1248],
-  a4: ["A4 (210 × 297 mm)", "210mm", "297mm", 1123],
+  short: ["Short (8.5 × 11 in)", "8.5in", "11in", 1056, 816],
+  long: ["Long (8.5 × 13 in)", "8.5in", "13in", 1248, 816],
+  a4: ["A4 (210 × 297 mm)", "210mm", "297mm", 1123, 794],
 } as const
 type Paper = keyof typeof PAPERS
 
-// Fixed heights (px) the pages are packed by; rows are a fixed h-7 so tables split predictably.
+// Fixed heights (px) the pages are packed by. A row is 28px plus 16px per extra wrapped line.
 // ponytail: estimated, not measured; measure in the browser if pages start spilling over.
-const H = { pad: 96, foot: 32, start: 270, contents: 172, carry: 50, head: 64, row: 28, gap: 24, end: 130 }
+const H = { pad: 96, foot: 32, start: 236, contents: 44, line: 20, carry: 50, head: 64, row: 28, wrap: 16, gap: 24, end: 130 }
+const CHAR = 6.2 // average px per character at text-xs
 
-const HEADINGS: Record<Exclude<Part["kind"], "audit">, string> = {
-  monthly: "Month", area: "Trade area", program: "Diploma / ST / Assessment", category: "Category", payee: "Payee", review: "Check",
-}
-
-type Col = { head: string; className?: string }
-type Block = { title: string; cols: Col[]; rows: ReactNode[][]; foot: ReactNode[]; note?: string }
-
-function Share({ of, v }: { of: number; v: number }) {
-  const pct = of ? (100 * v) / of : 0
-  return (
-    <span className="flex items-center justify-end gap-2">
-      <span className="h-1.5 w-14 overflow-hidden rounded-full bg-muted"><span className="block h-full bg-primary" style={{ width: `${Math.min(pct, 100)}%` }} /></span>
-      <span className="w-10 tabular-nums">{pct.toFixed(1)}%</span>
-    </span>
-  )
-}
-
-/** A report part as one table: grouped lines with share bars, or every voucher for the audit. */
-function toBlock(p: Part, title: string): Block {
-  const sum = total(p.scoped), n = p.scoped.length
-  if (p.kind === "audit") return {
-    title,
-    cols: [{ head: "DV #", className: "w-[11%]" }, { head: "DV date", className: "w-[11%]" }, { head: "Payee" }, { head: "Particulars" },
-      { head: "Area", className: "w-[10%]" }, { head: "Check #", className: "w-[11%]" }, { head: "Review", className: "w-[13%]" }, { head: "Amount", className: "w-[14%] text-right" }],
-    rows: p.scoped.map((r) => [r.dv_no, r.dv_date, r.payee, r.particulars, r.trade_area, r.check_number, r.issues.map((i) => ISSUES[i]).join(", ") || "OK", peso(r.amount)]),
-    foot: [`Total · ${n}`, "", "", "", "", "", "", peso(sum)],
-  }
-  return {
-    title,
-    cols: [{ head: HEADINGS[p.kind] }, { head: "Vouchers", className: "w-20 text-right" }, { head: "Amount", className: "w-32 text-right" }, { head: "Share", className: "w-28 text-right" }],
-    rows: p.lines.map((l) => [l.label, l.count, peso(l.amount), <Share key="s" of={sum} v={l.amount} />]),
-    foot: ["Total", n, peso(sum), "100%"],
-    note: p.kind === "review" ? "A voucher can fail more than one check, so these lines can add up to more than the total." : undefined,
-  }
-}
+const right = (c: Col) => (c.fmt === "text" ? "" : "text-right")
 
 export default async function Reports({ searchParams }: PageProps<"/reports">) {
   const params = toParams(await searchParams)
   const { rows, pull, user } = await getData()
-  const { kind, month, area, scoped, parts } = buildReport(rows, params)
+  const { kind, scope, area, scoped, tables } = buildReport(rows, params, todayManila())
   const paper: Paper = (params.get("paper") ?? "") in PAPERS ? (params.get("paper") as Paper) : "short"
-  const [, paperW, paperH, paperPx] = PAPERS[paper]
-  const generated = new Date().toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Manila" })
-  const scope = [monthLabel(month), area || "All trade areas"].join(" · ")
+  const [, paperW, paperH, paperPx, paperWPx] = PAPERS[paper]
+  const generated = new Date().toLocaleString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Manila" })
+  const where = area || "All trade areas"
   const summary = kind === "summary"
 
-  // A single report needs no section title; it is the document title.
-  const blocks = scoped.length ? parts.map((p) => toBlock(p, summary ? REPORTS[p.kind] : "")) : []
-  const pages = paginate(blocks.map((b) => b.rows.length), {
-    ...H, cap: paperPx - H.pad - H.foot, start: H.start + (summary ? H.contents : 0),
+  // Cells as printed, and each row's height from its longest wrapped text cell.
+  const blocks = scoped.length ? tables.map((t) => {
+    const show = (cells: Cell[]) => cells.map((v, i) => fmtCell(v, t.cols[i].fmt))
+    const body = t.rows.map(show), foot = t.foot && show(t.foot)
+    const height = (cells: string[]) => H.row + H.wrap * Math.max(0, ...cells.map((v, i) =>
+      t.cols[i].fmt === "text" ? Math.ceil(v.length / Math.max(4, Math.floor((t.cols[i].w * (paperWPx - 96)) / CHAR) - 2)) - 1 : 0))
+    return { ...t, body, foot, heights: [...body, ...(foot ? [foot] : [])].map(height) }
+  }) : []
+  const clusters = [...new Set(blocks.map((b) => clusterOf(b.kind)))]
+  const pages = paginate(blocks.map((b) => b.heights), {
+    ...H, cap: paperPx - H.pad - H.foot, start: H.start + (summary ? H.contents + H.line * (blocks.length + clusters.length) : 0),
   })
   const startsOn = (i: number) => pages.findIndex((pg) => pg.some((c) => c.block === i && c.from === 0)) + 1
-  const right = (c: Col) => (c.className?.includes("text-right") ? "text-right" : "")
 
+  const ms = months(rows), years = [...new Set(ms.map((m) => m.slice(0, 4)))]
+  const monthOpts = (value: string, order: string[]) => [...new Set([...order, value])].map((m): [string, string] => [m, monthLabel(m)])
   const word = (name: string, labelText: string, value: string, options: [string, string][]) => (
     <AutoSubmitSelect name={name} defaultValue={value} aria-label={labelText} className="font-medium">
       {options.map(([v, t]) => <NativeSelectOption key={v} value={v}>{t}</NativeSelectOption>)}
     </AutoSubmitSelect>
   )
+  const yearPick = word("year", "Year", scope.from.slice(0, 4), years.map((y): [string, string] => [y, y]))
 
   return (
     <div className="flex flex-col gap-4">
       <Form action="/reports/" className="flex flex-col gap-3 print:hidden">
         <input type="hidden" name="report" value={kind} />
+        {/* Carries the period over when the period type changes. */}
+        {scope.by !== "month" && scope.to && <input type="hidden" name="month" value={scope.to} />}
         <div className="flex flex-wrap items-center gap-2 text-lg">
-          <span>For</span>
-          {word("month", "Month", month, [["", "All months"], ...months(rows).map((m): [string, string] => [m, monthLabel(m)])])}
+          <span>By</span>
+          {word("period", "Period", scope.by, Object.entries(PERIODS))}
+          {scope.by === "month" && word("month", "Month", scope.to, monthOpts(scope.to, ms))}
+          {scope.by === "quarter" && <>{word("q", "Quarter", String(Number(scope.to.slice(5)) / 3), [1, 2, 3, 4].map((q): [string, string] => [String(q), `Q${q}`]))}{yearPick}</>}
+          {scope.by === "year" && yearPick}
+          {scope.by === "range" && <>
+            {word("from", "From month", scope.from, monthOpts(scope.from, [...ms].reverse()))}
+            <span>to</span>
+            {word("to", "To month", scope.to, monthOpts(scope.to, [...ms].reverse()))}
+          </>}
           <span>across</span>
           {word("area", "Trade area", area, [["", "All trade areas"], ...values(rows, "trade_area").map((a): [string, string] => [a, a])])}
           <span>on</span>
@@ -112,13 +96,18 @@ export default async function Reports({ searchParams }: PageProps<"/reports">) {
         </div>
       </Form>
 
-      <div className="grid items-start gap-4 lg:grid-cols-[14rem_minmax(0,1fr)] print:block">
-        <nav aria-label="Reports" className="flex flex-col gap-1 print:hidden">
-          {(Object.entries(REPORTS) as [Kind, string][]).map(([k, name]) => (
-            <Button key={k} variant={k === kind ? "secondary" : "ghost"} className="justify-start" aria-current={k === kind ? "page" : undefined}
-              render={<Link href={"/reports/" + qs(params, { report: k })} />} nativeButton={false}>
-              {name}
-            </Button>
+      <div className="grid items-start gap-4 lg:grid-cols-[15rem_minmax(0,1fr)] print:block">
+        <nav aria-label="Reports" className="flex flex-col gap-3 print:hidden">
+          {CLUSTERS.map(([name, kinds]) => (
+            <div key={name} className="flex flex-col gap-1">
+              <h2 className="px-2.5 text-xs font-medium text-muted-foreground">{name}</h2>
+              {kinds.map((k) => (
+                <Button key={k} variant={k === kind ? "secondary" : "ghost"} className="h-auto justify-start py-1.5 text-left whitespace-normal" aria-current={k === kind ? "page" : undefined}
+                  render={<Link href={"/reports/" + qs(params, { report: k })} />} nativeButton={false}>
+                  {REPORTS[k]}
+                </Button>
+              ))}
+            </div>
           ))}
         </nav>
 
@@ -132,34 +121,45 @@ export default async function Reports({ searchParams }: PageProps<"/reports">) {
                 className="mx-auto flex shrink-0 flex-col gap-6 bg-card p-[0.5in] text-card-foreground shadow-md ring-1 ring-foreground/10 break-after-page last:break-after-auto print:m-0 print:shadow-none print:ring-0">
                 {pi === 0 ? (
                   <>
-                    {/* Letterhead: seal, office, date, over a 2px ink rule like a printed form. */}
-                    <header className="flex items-center gap-3 border-b-2 border-foreground pb-3">
-                      <Image src="/logo.webp" alt="" width={44} height={44} />
-                      <div className="flex flex-col leading-tight">
-                        <strong className="text-base">KorPhil-TESDA</strong>
-                        <span className="text-xs text-muted-foreground">Regional Training Center, Davao · Accounting Office</span>
+                    {/* Letterhead, as on the office's printed forms. */}
+                    <header className="grid grid-cols-[auto_1fr_auto] items-center gap-3 text-[#1b2a6b]">
+                      <div className="flex items-center gap-1.5">
+                        <Image src="/bagong_pilipinas_logo.png" alt="Bagong Pilipinas" width={86} height={80} className="h-20 w-auto" />
+                        <Image src="/tesda_logo.png" alt="TESDA" width={80} height={80} className="size-20" />
                       </div>
-                      <div className="ml-auto text-right text-xs leading-tight text-muted-foreground">
-                        <div>Generated</div>
-                        <div className="font-medium text-foreground tabular-nums">{generated}</div>
+                      <div className="text-center leading-tight">
+                        <div className="text-[15px]">Technical Education and Skills Development Authority XI</div>
+                        <div className="text-[15px] font-bold">REGIONAL TRAINING CENTER – KOREA PHILIPPINES</div>
+                        <div className="text-[15px] font-bold">VOCATIONAL TRAINING CENTER</div>
+                        <div className="text-[15px]">Buhisan Tibungco, Davao City, Philippines</div>
                       </div>
+                      <Image src="/tesda_korphil_logo.png" alt="Korea-Philippines Vocational Training Center" width={80} height={80} className="size-20" />
                     </header>
-                    <div className="flex flex-col items-center gap-1 text-center">
-                      <h2 className="font-heading text-xl font-bold tracking-tight text-balance">{REPORTS[kind]}</h2>
-                      <p className="text-sm text-muted-foreground">{scope}</p>
+                    <div className="flex flex-col items-center gap-0.5 border-y-2 border-double border-foreground/70 py-2 text-center">
+                      <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Accounting Office · Disbursement report</p>
+                      <h2 className="font-heading text-lg font-bold tracking-tight text-balance">{REPORTS[kind]}</h2>
+                      <p className="text-sm">{scope.label} · {where}</p>
+                      <p className="text-xs text-muted-foreground">Generated {generated}</p>
                     </div>
-                    {scoped.length ? <Totals rows={scoped} /> : (
-                      <p className="py-8 text-center text-muted-foreground">No vouchers match these choices. Widen the month or trade area above.</p>
+                    {!scoped.length && (
+                      <p className="py-8 text-center text-muted-foreground">No vouchers match these choices. Widen the period or trade area above.</p>
                     )}
                     {summary && blocks.length > 0 && (
                       <nav aria-label="Contents" className="flex flex-col gap-2 text-sm">
                         <h3 className="font-heading font-bold">Contents</h3>
                         <ol className="flex flex-col">
-                          {blocks.map((b, i) => (
-                            <li key={b.title} className="flex gap-2">
-                              <span>{i + 1}. {b.title}</span>
-                              <span className="flex-1 -translate-y-1 border-b border-dotted border-foreground/30" />
-                              <span className="tabular-nums">{startsOn(i)}</span>
+                          {clusters.map((c) => (
+                            <li key={c}>
+                              <span className="block h-5 text-xs font-medium tracking-wide text-muted-foreground uppercase">{c}</span>
+                              <ol>
+                                {blocks.map((b, i) => clusterOf(b.kind) === c && (
+                                  <li key={b.kind} className="flex h-5 gap-2 pl-3">
+                                    <span>{i + 1}. {b.title}</span>
+                                    <span className="flex-1 -translate-y-1 border-b border-dotted border-foreground/30" />
+                                    <span className="tabular-nums">{startsOn(i)}</span>
+                                  </li>
+                                ))}
+                              </ol>
                             </li>
                           ))}
                         </ol>
@@ -168,40 +168,44 @@ export default async function Reports({ searchParams }: PageProps<"/reports">) {
                   </>
                 ) : (
                   <header className="flex justify-between gap-4 border-b pb-2 text-xs text-muted-foreground">
-                    <strong className="text-foreground">KorPhil-TESDA · {REPORTS[kind]}</strong>
-                    <span>{scope}</span>
+                    <strong className="text-foreground">RTC – KorPhil VTC · {REPORTS[kind]}</strong>
+                    <span>{scope.label} · {where}</span>
                   </header>
                 )}
 
                 {chunks.map(({ block, from, to }) => {
-                  const b = blocks[block], foot = to > b.rows.length
+                  const b = blocks[block], foot = b.foot && to > b.body.length
                   return (
                     <section key={`${block}-${from}`} className="flex flex-col gap-2">
-                      {b.title && <h3 className="font-heading text-sm font-bold">{b.title}{from > 0 && <span className="font-normal text-muted-foreground"> (continued)</span>}</h3>}
-                      <Table className="table-fixed text-xs">
+                      <h3 className="flex items-baseline justify-between gap-4 font-heading text-sm font-bold">
+                        <span>{summary && `${block + 1}. `}{b.title}{from > 0 && <span className="font-normal text-muted-foreground"> (continued)</span>}</span>
+                        {summary && <span className="text-xs font-normal text-muted-foreground">{clusterOf(b.kind)}</span>}
+                      </h3>
+                      <Table className="table-fixed border-y border-foreground/70 text-xs">
+                        <colgroup>{b.cols.map((c) => <col key={c.head} style={{ width: `${c.w * 100}%` }} />)}</colgroup>
                         <TableHeader>
-                          <TableRow className="hover:bg-transparent">
-                            {b.cols.map((c) => <TableHead key={c.head} className={`h-8 ${c.className ?? ""}`}>{c.head}</TableHead>)}
+                          <TableRow className="border-foreground/70 bg-muted/60 hover:bg-muted/60">
+                            {b.cols.map((c) => <TableHead key={c.head} className={`h-8 font-semibold whitespace-normal ${right(c)}`}>{c.head}</TableHead>)}
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {b.rows.slice(from, to).map((cells, ri) => (
-                            <TableRow key={from + ri} className="h-7">
+                          {b.body.slice(from, to).map((cells, ri) => (
+                            <TableRow key={from + ri} className="h-7 hover:bg-transparent">
                               {cells.map((v, ci) => (
-                                <TableCell key={ci} title={typeof v === "string" ? v : undefined} className={`truncate py-0 tabular-nums ${right(b.cols[ci])}`}>{v}</TableCell>
+                                <TableCell key={ci} className={`py-1.5 align-top tabular-nums ${b.cols[ci].fmt === "text" ? "whitespace-normal break-words" : right(b.cols[ci])}`}>{v}</TableCell>
                               ))}
                             </TableRow>
                           ))}
                         </TableBody>
                         {foot && (
-                          <TableFooter>
-                            <TableRow className="h-7">
-                              {b.foot.map((v, ci) => <TableCell key={ci} className={`truncate py-0 font-medium tabular-nums ${right(b.cols[ci])}`}>{v}</TableCell>)}
+                          <TableFooter className="border-foreground/70">
+                            <TableRow className="h-7 hover:bg-transparent">
+                              {b.foot!.map((v, ci) => <TableCell key={ci} className={`py-1.5 font-bold tabular-nums ${right(b.cols[ci])}`}>{v}</TableCell>)}
                             </TableRow>
                           </TableFooter>
                         )}
                       </Table>
-                      {foot && b.note && <p className="text-xs text-muted-foreground">{b.note}</p>}
+                      {to === b.heights.length && b.note && <p className="text-xs text-muted-foreground">Note: {b.note}</p>}
                     </section>
                   )
                 })}

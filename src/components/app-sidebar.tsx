@@ -24,7 +24,7 @@ export function AppSidebar({ counts, sheetTitle, synced, sheetUrl }: Props) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" tooltip="KorPhil-TESDA" render={<Link href="/dashboard/" />}>
-              <Image src="/logo.webp" alt="" width={32} height={32} />
+              <Image src="/tesda_korphil_logo.png" alt="" width={32} height={32} />
               <span className="flex flex-col leading-tight">
                 <strong className="font-semibold">KorPhil-TESDA</strong>
                 <small className="text-sidebar-foreground/70">Disbursements</small>

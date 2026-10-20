@@ -231,21 +231,23 @@ export function toParams(sp: Record<string, string | string[] | undefined>): URL
 
 export type Chunk = { block: number; from: number; to: number }
 /**
- * Splits tables across fixed-height pages. Each block is a table of `rows` body rows plus one total row;
- * a chunk shows rows [from, to) and includes the total row when `to` is rows + 1. Heights are px:
- * `cap` usable per page, `start` taken on page 1, `carry` taken on later pages, `head` per chunk
- * (title + column headings), `gap` between chunks, `end` reserved on the last page (sign-off).
+ * Splits tables across fixed-height pages. Each block lists its row heights (body rows, then any total
+ * row); a chunk shows rows [from, to). Heights are px: `cap` usable per page, `start` taken on page 1,
+ * `carry` taken on later pages, `head` per chunk (title + column headings), `gap` between chunks,
+ * `end` reserved on the last page (sign-off). A row taller than a page still gets a page of its own.
  */
-export function paginate(blocks: number[], h: { cap: number; start: number; carry: number; head: number; row: number; gap: number; end: number }): Chunk[][] {
+export function paginate(blocks: number[][], h: { cap: number; start: number; carry: number; head: number; gap: number; end: number }): Chunk[][] {
   const pages: Chunk[][] = [[]]
   let used = h.start
   const next = () => { pages.push([]); used = h.carry }
   blocks.forEach((rows, block) => {
-    for (let from = 0; from <= rows;) {
-      if (used + h.head + h.row > h.cap) next()
-      const to = Math.min(rows + 1, from + Math.floor((h.cap - used - h.head) / h.row))
+    for (let from = 0; from < rows.length;) {
+      if (used + h.head + rows[from] > h.cap) next()
+      used += h.head
+      let to = from
+      while (to < rows.length && (to === from || used + rows[to] <= h.cap)) used += rows[to++]
       pages.at(-1)!.push({ block, from, to })
-      used += h.head + (to - from) * h.row + h.gap
+      used += h.gap
       from = to
     }
   })

@@ -45,7 +45,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
         <div className="flex items-center gap-3">
           {/* The seal has white corners, so it sits on a white disc. */}
           <span className="block size-8 rounded-full bg-white p-0.5 lg:hidden">
-            <Image src="/logo.webp" alt={SEAL_ALT} width={32} height={32} loading="eager" className="size-full rounded-full" />
+            <Image src="/tesda_korphil_logo.png" alt={SEAL_ALT} width={32} height={32} loading="eager" className="size-full rounded-full" />
           </span>
           <p className="font-semibold">KorPhil-TESDA <span className="font-normal text-sidebar-foreground/70">Disbursements</span></p>
         </div>
@@ -53,7 +53,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
         <div className="flex flex-col items-start gap-7">
           <span className="relative hidden size-28 rounded-full bg-white p-1.5 ring-4 ring-white/15 lg:block lg:[@media(min-height:52rem)]:size-36">
             <SealRings />
-            <Image src="/logo.webp" alt={SEAL_ALT} width={144} height={144} loading="eager" className="size-full rounded-full" />
+            <Image src="/tesda_korphil_logo.png" alt={SEAL_ALT} width={144} height={144} loading="eager" className="size-full rounded-full" />
           </span>
           <p className="max-w-md font-heading text-3xl leading-[1.05] font-semibold tracking-tight text-balance lg:text-5xl">
             Every voucher, <span className="text-sidebar-foreground/60">accounted for.</span>

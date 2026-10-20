@@ -62,11 +62,14 @@ test("dashboard figures", () => {
 })
 
 test("paginate", () => {
-  const h = { cap: 100, start: 40, carry: 10, head: 10, row: 10, gap: 0, end: 30 }
+  const h = { cap: 100, start: 40, carry: 10, head: 10, gap: 0, end: 30 }
+  const rows = (n: number) => Array<number>(n).fill(10) // body rows + total row
   // 3 rows + total fit page 1 (40 + 10 + 4*10 = 90); sign-off (30) spills to a new page.
-  assert.deepEqual(paginate([3], h), [[{ block: 0, from: 0, to: 4 }], []])
+  assert.deepEqual(paginate([rows(4)], h), [[{ block: 0, from: 0, to: 4 }], []])
   // 10 rows + total: page 1 takes 5, page 2 takes the other 5 + total, sign-off still fits? 10+10+60=80, +30 > 100.
-  assert.deepEqual(paginate([10], h), [[{ block: 0, from: 0, to: 5 }], [{ block: 0, from: 5, to: 11 }], []])
+  assert.deepEqual(paginate([rows(11)], h), [[{ block: 0, from: 0, to: 5 }], [{ block: 0, from: 5, to: 11 }], []])
   // Two small blocks share page 1; no rows still prints its total row.
-  assert.deepEqual(paginate([0, 1], { ...h, start: 0 }), [[{ block: 0, from: 0, to: 1 }, { block: 1, from: 0, to: 2 }]])
+  assert.deepEqual(paginate([rows(1), rows(2)], { ...h, start: 0 }), [[{ block: 0, from: 0, to: 1 }, { block: 1, from: 0, to: 2 }]])
+  // A wrapped (taller) row moves to the next page whole.
+  assert.deepEqual(paginate([[10, 10, 10, 10, 30]], h), [[{ block: 0, from: 0, to: 4 }], [{ block: 0, from: 4, to: 5 }]])
 })

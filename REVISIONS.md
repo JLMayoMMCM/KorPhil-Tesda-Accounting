@@ -87,3 +87,22 @@ Net: about -730 lines, -0 deps (`shadcn`, `server-only` and `cn` are all used: `
 **Built:** `<dl>` strip in `dashboard/page.tsx` on gap-px hairlines, wrapping 2 → 3 → 6 columns. `median`, `monthsBack` and `yearThrough` moved into `ledger.ts`, with tests. The month comparison and the Summary popover share one `change()` helper. `tsc`, `eslint` and `node --test` pass. The browser check is still open (it needs a Google sign-in).
 
 **Done when:** the strip renders for a single year and for All years, the empty-year state still shows, the layout is fine at phone width and in print, and `tsc`, `eslint` and `node --test` pass.
+
+## R4 · Reports revision · 2026-10-20
+
+**Goal:** reports read like a formal financial report: the office letterhead, full tables, a standard order, period filters and KPIs.
+
+### Done
+
+- [x] **Letterhead:** Bagong Pilipinas + TESDA logos left, the KorPhil VTC seal right, the four-line TESDA XI / RTC – KorPhil VTC / Buhisan Tibungco address centred, as on the office's printed header. Later pages carry a one-line running header.
+- [x] **Logos:** `public/logo.webp` was removed, so the favicon, sidebar and login now use `tesda_korphil_logo.png`. The proxy matcher lets every `.png` through without a session.
+- [x] **Order:** Key performance indicators → by category (nature) → by trade area → by diploma / ST / assessment (segments) → by month → by payee → exceptions → voucher register. The sidebar and the contents page group them as Overview · Analysis of disbursements · Period and payee · Compliance.
+- [x] **Tables:** No. · label · vouchers · amount · average · % of total, with a total row. The share bars are gone. Monthly lists every month in the period oldest first (zero months included) with a cumulative column; "Not set" and "Undated" lines sit at the foot. Cells wrap instead of truncating; pagination estimates wrapped row heights.
+- [x] **Periods:** All dates · Month · Quarter · Year · Range of months, headed IFRS-style ("For the quarter ended September 30, 2026"). A bare `?month=` from old links still means that month.
+- [x] **KPIs:** total, count, average, median, largest voucher, average per month (elapsed months only), payees, top-5 payee share, check # coverage, verified share, exception rate and amount, each against the prior period of the same length with a change column (% or pp).
+- [x] **CSV:** one titled section per table, same columns as the page.
+- [x] `paginate` takes per-row heights; test updated. `tsc`, `eslint` and `node --test` pass. Period and KPI logic checked against synthetic data.
+
+### Follow-ups
+
+- [ ] **Browser check:** the report page needs a Google sign-in; the layout and the page-height estimates (`H` in `reports/page.tsx`) are not yet checked on screen or in print.
