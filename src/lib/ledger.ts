@@ -42,6 +42,13 @@ export const TABS = {
 export type Tab = keyof typeof TABS
 
 export const NOT_SET = "Not set"
+// Text typed to mean "nothing here" counts as blank, so reports, filters and review checks agree on what is Not set.
+const PLACEHOLDER = /^(\(?blank\)?|-+|n\/?a|none)$/i
+/** "", "  ", "(BLANK)", "-", "N/A", "none" -> true. The sheet keeps what was typed; only the reading changes. */
+export const blank = (text: string | undefined) => {
+  const t = (text ?? "").trim()
+  return !t || PLACEHOLDER.test(t)
+}
 
 // extra: columns the app has no role for (R5), by column key ("x:" + header text).
 export type RawVoucher = Record<Field, string> & { sheet_row: number; extra?: Record<string, string> }
@@ -117,12 +124,12 @@ export function enrich(rows: RawVoucher[], missing: Field[] = []): Voucher[] {
     const parsed = parseAmount(raw.gross_amount)
     const dv = parseDate(raw.dv_date)
     const checks: [Issue, boolean][] = [
-      ["no_dv", !raw.dv_no.trim()],
+      ["no_dv", blank(raw.dv_no)],
       ["duplicate_dv", (seen.get(raw.dv_no.trim()) ?? 0) > 1],
       ["no_date", !dv],
       ["no_amount", !parsed],
-      ["no_check", !missing.includes("check_number") && !raw.check_number.trim()],
-      ["no_area", !missing.includes("trade_area") && !raw.trade_area.trim()],
+      ["no_check", !missing.includes("check_number") && blank(raw.check_number)],
+      ["no_area", !missing.includes("trade_area") && blank(raw.trade_area)],
     ]
     // A verified row has had its blanks signed off; only a duplicate DV # still flags it.
     const verified = isVerified(raw)
@@ -161,7 +168,7 @@ export const monthsBack = (m: string, n: number) => {
 export const yearThrough = (rows: Voucher[], year: number, mm: string) =>
   rows.filter((r) => r.month >= `${year}-01` && r.month <= `${year}-${mm}`)
 
-export const label = (r: Voucher, field: Field) => r[field].trim() || NOT_SET
+export const label = (r: Voucher, field: Field) => (blank(r[field]) ? NOT_SET : r[field].trim())
 
 /** [label, count, amount] for key(row), largest amount first. */
 export function group(rows: Voucher[], key: (r: Voucher) => string): [string, number, number][] {
@@ -191,7 +198,10 @@ export const months = (rows: Voucher[]) =>
   [...new Set(rows.map((r) => r.month).filter(Boolean))].sort().reverse()
 
 /** A row's label in any column by key: a field, or an extra column ("x:" + header). */
-export const labelOf = (r: RawVoucher, key: string) => (key in FIELD_LABELS ? r[key as Field] : r.extra?.[key] ?? "").trim() || NOT_SET
+export const labelOf = (r: RawVoucher, key: string) => {
+  const text = key in FIELD_LABELS ? r[key as Field] : r.extra?.[key] ?? ""
+  return blank(text) ? NOT_SET : text.trim()
+}
 
 /** Rows matching the voucher-list query params (tab, area, col + is, month, year, issue — also "none" / "any" — q, sel). */
 export function filterRows(rows: Voucher[], params: URLSearchParams): Voucher[] {

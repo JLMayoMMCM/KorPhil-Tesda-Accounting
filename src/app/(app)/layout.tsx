@@ -6,6 +6,8 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { AppUI } from "@/components/app-ui"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
+import { Toaster } from "@/components/ui/toast"
+import { TooltipProvider } from "@/components/ui/tooltip"
 import { clock, getData } from "@/lib/data"
 import { sheetUrl } from "@/lib/sheets"
 
@@ -14,26 +16,31 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   const synced = clock(pull.at)
   // The sidebar writes this cookie on toggle; reading it keeps the rail collapsed across reloads.
   const sidebarOpen = (await cookies()).get("sidebar_state")?.value !== "false"
+  // Toast and tooltip live here, not in the root layout, so /login ships no Base UI.
   return (
-    <AppUI>
-      <SidebarProvider defaultOpen={sidebarOpen}>
-        <AppSidebar
-          counts={counts}
-          sheetTitle={pull.title}
-          synced={synced ? `Synced ${synced} · ${pull.rows} rows` : "Not synced"}
-          sheetUrl={sheetUrl}
-        />
-        <SidebarInset className="min-w-0">
-          <AppHeader user={user} synced={synced} />
-          {error && (
-            <Alert variant="destructive" className="mx-4 mt-4 w-auto">
-              <CircleAlertIcon />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          <div className="flex flex-1 flex-col p-4 print:p-0">{children}</div>
-        </SidebarInset>
-      </SidebarProvider>
-    </AppUI>
+    <TooltipProvider>
+      <Toaster>
+        <AppUI>
+          <SidebarProvider defaultOpen={sidebarOpen}>
+            <AppSidebar
+              counts={counts}
+              sheetTitle={pull.title}
+              synced={synced ? `Synced ${synced} · ${pull.rows} rows` : "Not synced"}
+              sheetUrl={sheetUrl}
+            />
+            <SidebarInset className="min-w-0">
+              <AppHeader user={user} synced={synced} />
+              {error && (
+                <Alert variant="destructive" className="mx-4 mt-4 w-auto">
+                  <CircleAlertIcon />
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+              <div className="flex flex-1 flex-col p-4 print:p-0">{children}</div>
+            </SidebarInset>
+          </SidebarProvider>
+        </AppUI>
+      </Toaster>
+    </TooltipProvider>
   )
 }

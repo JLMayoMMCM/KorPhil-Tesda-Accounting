@@ -3,14 +3,14 @@ import type { Metadata } from "next"
 import Form from "next/form"
 import Link from "next/link"
 
-import { AutoSubmitSelect } from "@/components/auto-submit"
+import { AutoSubmitCheckbox, AutoSubmitSelect } from "@/components/auto-submit"
 import { PrintButton } from "@/components/print-button"
 import { Contents, layout, Letterhead, PageFooter, PAPERS, RunningHeader, Schedule, SignOff, type Paper } from "@/components/report-sheet"
 import { Button } from "@/components/ui/button"
 import { NativeSelectOption } from "@/components/ui/native-select"
 import { getData } from "@/lib/data"
 import { monthLabel, months, qs, todayManila, toParams, values } from "@/lib/ledger"
-import { buildReport, clustersFor, manilaTime, PERIODS, titleOf } from "@/lib/reports"
+import { buildReport, clustersFor, KPI_BLOCKS, manilaTime, PERIODS, readShow, titleOf, withBlocks, type KpiBlock } from "@/lib/reports"
 import { fullName } from "@/lib/session"
 
 export const metadata: Metadata = { title: "Reports" }
@@ -19,7 +19,10 @@ export default async function Reports({ searchParams }: PageProps<"/reports">) {
   const params = toParams(await searchParams)
   const { rows, pull, user, columns } = await getData()
   const generated = new Date()
-  const { kind, scope, area, tables } = buildReport(rows, params, todayManila(), columns, { source: pull.title, pulled: pull.at, generated, by: fullName(user) })
+  const built = buildReport(rows, params, todayManila(), columns, { source: pull.title, pulled: pull.at, generated, by: fullName(user) })
+  const { kind, scope, area } = built
+  const show = readShow(params), hasKpi = built.tables.some((t) => t.charts)
+  const tables = built.tables.map((t) => withBlocks(t, show))
   const paper: Paper = (params.get("paper") ?? "") in PAPERS ? (params.get("paper") as Paper) : "short"
   const [, paperW, paperH] = PAPERS[paper]
   const summary = kind === "summary"
@@ -60,6 +63,23 @@ export default async function Reports({ searchParams }: PageProps<"/reports">) {
           {word("paper", "Paper size", paper, Object.entries(PAPERS).map(([k, [t]]): [string, string] => [k, t]))}
           <span>paper</span>
         </div>
+        {hasKpi ? (
+          <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+            <legend className="sr-only">Key performance indicators: parts to show</legend>
+            <span className="text-muted-foreground">Key performance indicators show</span>
+            {/* Always sent, so a URL with every box cleared still means "show none", not "show all". */}
+            <input type="hidden" name="show" value="" />
+            {(Object.entries(KPI_BLOCKS) as [KpiBlock, string][]).map(([k, text]) => (
+              <label key={k} className="flex items-center gap-1.5">
+                <AutoSubmitCheckbox name="show" value={k} defaultChecked={show.includes(k)} className="size-4 accent-primary" />
+                {text}
+              </label>
+            ))}
+          </fieldset>
+        ) : (
+          // Keeps the choice when moving to another report and back.
+          params.has("show") && ["", ...show].map((k) => <input key={k} type="hidden" name="show" value={k} />)
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <Button render={<a href={"/reports/csv/" + qs(params)} download />} nativeButton={false}>
             <DownloadIcon data-icon="inline-start" />Download CSV

@@ -2,7 +2,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { byIssue, DV_FORMAT, enrich, nextDvNo, filterRows, inTab, labelOf, median, monthsBack, paginate, parseAmount, parseDate, peso, qs, serialDate, sheetDate, total, yearThrough, type RawVoucher } from "./ledger.ts"
+import { blank, byIssue, DV_FORMAT, enrich, label, nextDvNo, filterRows, inTab, labelOf, median, monthsBack, paginate, parseAmount, parseDate, peso, qs, serialDate, sheetDate, total, yearThrough, type RawVoucher } from "./ledger.ts"
 import { classifyRow, colLetter, detectLayout, fixedLayout, HEADERS, inferType, layoutDiff, META, normalize, readSheet, savedFrom } from "./sheet-config.ts"
 
 let n = 5
@@ -50,6 +50,14 @@ test("ledger", () => {
   assert.equal(parseAmount(String(73419.5)), 7341950) // raw decimal
   assert.equal(parseAmount(String(60249)), 6024900) // raw whole number
   assert.equal(qs(new URLSearchParams("tab=review&open=4"), { open: null, area: "ADMIN" }), "?tab=review&area=ADMIN")
+
+  // Placeholder text reads as blank everywhere: Not set in reports and filters, flagged by the review checks.
+  for (const t of ["", "  ", "(BLANK)", "blank", "-", "--", "N/A", "n/a", "NA", "None"]) assert.ok(blank(t), t)
+  for (const t of ["ADMIN", "N/A Supplies", "-5", "Nonelectric"]) assert.ok(!blank(t), t)
+  const [ph] = enrich([row("D", "01-09-26", "1,000", "-", "(BLANK)")])
+  assert.equal(label(ph, "trade_area"), "Not set")
+  assert.equal(labelOf(ph, "trade_area"), "Not set")
+  assert.deepEqual(ph.issues, ["no_check", "no_area"])
 })
 
 test("dashboard figures", () => {
