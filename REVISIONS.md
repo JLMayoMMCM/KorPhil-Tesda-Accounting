@@ -164,3 +164,19 @@ Net: about -730 lines, -0 deps (`shadcn`, `server-only` and `cn` are all used: `
 - [ ] **Not done from the plan:** two columns with the same header pick the first, not "the one holding the expected data type"; the Trade Areas page stays trade-area only.
 - [ ] **Open decisions left:** whether only named people (not all Editors) may change settings; several sheet files (one per year) as a later revision.
 
+
+## R6 · Reports redo: modularity, consistency, formality, transparency · 2026-10-27
+
+**Goal:** the same report, built from parts that read the same everywhere, in a formal register, and showing how every figure was reached.
+
+### Done
+
+- [x] **Modularity:** `reports.ts` builds each schedule from a `BUILDERS` registry (one function per report, a shared `Ctx` instead of five arguments); breakdowns (category, trade area, program, payee, extra dropdown columns) share one `breakdown()`. The page's sheet parts moved to `components/report-sheet.tsx` (`layout`, `Letterhead`, `RunningHeader`, `Contents`, `Schedule`, `SignOff`, `PageFooter`); `reports/page.tsx` only holds the controls and composes the pages.
+- [x] **Consistency:** shared column definitions (No., Vouchers, Amount (₱), Average (₱), % of total) and one "Total" row label across schedules; the register's total row matches the others. Every schedule has a basis line under its title and numbered notes under its table, on the page and in the CSV.
+- [x] **Formality:** schedules are numbered ("Schedule 3. Disbursements by trade area") in every report and in the contents; the title block states "Amounts in Philippine pesos (₱)", so table amounts print without the sign (KPIs keep it, as their rows mix units); totals carry the accounting rule (single line above, double below); the sign-off adds a date line; the footer reads "System-generated from … · date · Page x of y".
+- [x] **Transparency:** every report ends with a **Basis of preparation**: source sheet and when it was pulled, period, trade area, vouchers on record, what was left out (other trade areas, dated outside the period, undated) so the counts add up, vouchers whose amount was blank or unreadable (counted as ₱0.00), a **reconciliation** of each schedule's total against the vouchers in scope (computed, and says which schedule differs if any), rounding, and who generated it when. KPI and exception schedules define their measures and checks, including that a Verified voucher is flagged only for a duplicate DV #. The register adds the sheet **Row** so each line traces to its source, and lists **every column the sheet shows** (all but Hidden, extra columns included) with the sheet's own headers, two lines per voucher (line 1: Row · DV date · DV # · payee · check # · amount · review; line 2, indented: particulars and the rest in sheet order). The CSV keeps one line per voucher in sheet order. The full report now ends with the register as its supporting schedule. An empty scope still prints the basis.
+- [x] `tsc`, `eslint` and `node --test` pass. `buildReport` was smoke-run on synthetic vouchers (full report, register, empty scope): exclusions add up to the vouchers on record and the reconciliation agrees.
+
+### Follow-ups
+
+- [ ] **Browser check:** the report needs a Google sign-in; the new basis/notes heights in `layout()` are estimates and not yet checked on screen or in print.

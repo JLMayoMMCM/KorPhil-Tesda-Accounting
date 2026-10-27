@@ -255,16 +255,17 @@ export type Chunk = { block: number; from: number; to: number }
  * Splits tables across fixed-height pages. Each block lists its row heights (body rows, then any total
  * row); a chunk shows rows [from, to). Heights are px: `cap` usable per page, `start` taken on page 1,
  * `carry` taken on later pages, `head` per chunk (title + column headings), `gap` between chunks,
- * `end` reserved on the last page (sign-off). A row taller than a page still gets a page of its own.
+ * `end` reserved on the last page (sign-off). `heads` overrides `head` per block. A row taller than a page still gets a page of its own.
  */
-export function paginate(blocks: number[][], h: { cap: number; start: number; carry: number; head: number; gap: number; end: number }): Chunk[][] {
+export function paginate(blocks: number[][], h: { cap: number; start: number; carry: number; head: number; heads?: number[]; gap: number; end: number }): Chunk[][] {
   const pages: Chunk[][] = [[]]
   let used = h.start
   const next = () => { pages.push([]); used = h.carry }
   blocks.forEach((rows, block) => {
+    const head = h.heads?.[block] ?? h.head
     for (let from = 0; from < rows.length;) {
-      if (used + h.head + rows[from] > h.cap) next()
-      used += h.head
+      if (used + head + rows[from] > h.cap) next()
+      used += head
       let to = from
       while (to < rows.length && (to === from || used + rows[to] <= h.cap)) used += rows[to++]
       pages.at(-1)!.push({ block, from, to })
