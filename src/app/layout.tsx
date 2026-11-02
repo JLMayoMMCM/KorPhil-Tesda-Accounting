@@ -13,7 +13,8 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={cn("h-full antialiased font-sans", geistMono.variable, ibmPlexSans.variable)}>
-      <body className="min-h-full">{children}</body>
+      {/* Extensions (e.g. Video Speed Controller's "vsc-initialized") add body classes before hydration; this only ignores body's own attributes. */}
+      <body className="min-h-full" suppressHydrationWarning>{children}</body>
     </html>
   )
 }

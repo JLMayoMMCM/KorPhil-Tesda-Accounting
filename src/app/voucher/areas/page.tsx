@@ -19,7 +19,7 @@ export const metadata: Metadata = { title: "Trade Areas" }
 
 const dvs = (n: number) => `${n} DV${n === 1 ? "" : "s"}`
 
-export default async function Areas({ searchParams }: PageProps<"/areas">) {
+export default async function Areas({ searchParams }: PageProps<"/voucher/areas">) {
   const params = toParams(await searchParams)
   const { rows, error } = await getData()
   const period = params.get("period") ?? ""
@@ -37,7 +37,7 @@ export default async function Areas({ searchParams }: PageProps<"/areas">) {
       const hit = mine.filter((r) => r.month === key)
       return {
         key, count: hit.length, amount: total(hit),
-        url: "/vouchers/" + qs(new URLSearchParams(), key ? { area, month: key } : { area, issue: "no_date" }),
+        url: "/voucher/vouchers/" + qs(new URLSearchParams(), key ? { area, month: key } : { area, issue: "no_date" }),
       }
     })
     const share = total(scoped) ? (100 * total(mine)) / total(scoped) : 0
@@ -59,7 +59,7 @@ export default async function Areas({ searchParams }: PageProps<"/areas">) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end gap-3">
-        <Form action="/areas/">
+        <Form action="/voucher/areas/">
           {byCount && <input type="hidden" name="by" value="count" />}
           <Field orientation="horizontal">
             <FieldLabel htmlFor="period">Period</FieldLabel>
@@ -71,9 +71,9 @@ export default async function Areas({ searchParams }: PageProps<"/areas">) {
         </Form>
         <div role="group" aria-label="Show" className="inline-flex rounded-lg border p-0.5">
           <Button size="sm" variant={byCount ? "ghost" : "secondary"} aria-current={!byCount || undefined}
-            render={<Link href={"/areas/" + qs(params, { by: null })} />} nativeButton={false}>Amount</Button>
+            render={<Link href={"/voucher/areas/" + qs(params, { by: null })} />} nativeButton={false}>Amount</Button>
           <Button size="sm" variant={byCount ? "secondary" : "ghost"} aria-current={byCount || undefined}
-            render={<Link href={"/areas/" + qs(params, { by: "count" })} />} nativeButton={false}>Count</Button>
+            render={<Link href={"/voucher/areas/" + qs(params, { by: "count" })} />} nativeButton={false}>Count</Button>
         </div>
         <span className="ml-auto text-sm text-muted-foreground">Click any number to open those vouchers</span>
       </div>

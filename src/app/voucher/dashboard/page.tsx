@@ -39,7 +39,7 @@ const change = (now: number, before: number, against: string) => {
 }
 
 /** Overview of the whole sheet: how much is verified, what blocks the rest, and the shape of the money. */
-export default async function Dashboard({ searchParams }: PageProps<"/dashboard">) {
+export default async function Dashboard({ searchParams }: PageProps<"/voucher/dashboard">) {
   const { rows: everything, error, today, columns } = await getData()
   // Scope: one calendar year (Jan–Dec, default this year) or "all". Undated vouchers only show under All years.
   const years = [...new Set([today.slice(0, 4), ...months(everything).map((m) => m.slice(0, 4))])].sort().reverse()
@@ -51,7 +51,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
   const rows = year === "all" ? everything : everything.filter((r) => r.month.startsWith(year + "-"))
   const scope = year === "all" ? "all years" : year
   const link = (changes: Record<string, string>) =>
-    "/vouchers/" + qs(new URLSearchParams(), year === "all" ? changes : { ...changes, year })
+    "/voucher/vouchers/" + qs(new URLSearchParams(), year === "all" ? changes : { ...changes, year })
 
   const switcher = (summary: React.ReactNode) => (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b pb-2 print:hidden">
@@ -64,7 +64,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
           <DropdownMenuGroup>
             <DropdownMenuLabel>Year, by DV date</DropdownMenuLabel>
             {[...years, "all"].map((y) => (
-              <DropdownMenuItem key={y} className="gap-2 py-1.5" render={<Link href={`/dashboard/?year=${y}`} aria-current={y === year ? "page" : undefined} />}>
+              <DropdownMenuItem key={y} className="gap-2 py-1.5" render={<Link href={`/voucher/dashboard/?year=${y}`} aria-current={y === year ? "page" : undefined} />}>
                 <CheckIcon className={cn("text-primary", y !== year && "invisible")} />
                 <span className={cn("flex-1 tabular-nums", y === year && "font-medium")}>{y === "all" ? "All years" : y}</span>
                 <span className="text-xs text-muted-foreground tabular-nums">
@@ -79,7 +79,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
         <nav aria-label="Month" className="flex flex-wrap items-center gap-1">
           {MONTH_NUMBERS.map((m) => (
             <Button key={m} size="sm" variant={m === mm ? "secondary" : "ghost"} aria-current={m === mm ? "page" : undefined}
-              render={<Link href={`/dashboard/?year=${year}&month=${m}`} />} nativeButton={false}>
+              render={<Link href={`/voucher/dashboard/?year=${year}&month=${m}`} />} nativeButton={false}>
               {monthLabel(`${year}-${m}`).slice(0, 3)}
             </Button>
           ))}
@@ -326,7 +326,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/dashboard"
               <span className="mr-1 text-sm text-muted-foreground">Group by</span>
               {groupings.map((c) => (
                 <Button key={c.key} size="sm" variant={c.key === by.key ? "secondary" : "ghost"} aria-current={c.key === by.key ? "page" : undefined}
-                  render={<Link href={`/dashboard/?${new URLSearchParams({ ...(year === today.slice(0, 4) ? {} : { year }), ...(askedMonth ? { month: mm } : {}), by: c.key })}`} scroll={false} />} nativeButton={false}>
+                  render={<Link href={`/voucher/dashboard/?${new URLSearchParams({ ...(year === today.slice(0, 4) ? {} : { year }), ...(askedMonth ? { month: mm } : {}), by: c.key })}`} scroll={false} />} nativeButton={false}>
                   {c.label}
                 </Button>
               ))}

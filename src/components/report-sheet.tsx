@@ -5,6 +5,7 @@ import Image from "next/image"
 import { Table as T, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { monthLabel, NOT_SET, paginate, peso } from "@/lib/ledger"
 import { fmtCell, type Cell, type Col, type KpiBlock, type KpiCharts as Charts, type Slice, type Table } from "@/lib/reports"
+import { cn } from "@/lib/utils"
 
 /** Paper sizes: label, CSS width, CSS height, height and width in px (96 dpi). "Long" is PH long bond (8.5 × 13 in). */
 export const PAPERS = {
@@ -16,8 +17,8 @@ export type Paper = keyof typeof PAPERS
 
 // Fixed heights (px) the pages are packed by. A row is 28px plus 16px per extra wrapped line.
 // ponytail: estimated, not measured; measure in the browser if pages start spilling over.
-// A two-line register row is 8px of padding plus 20px per line, wrapping as above; its heading gets a second line too.
-const H = { pad: 96, foot: 32, start: 236, contents: 44, line: 20, carry: 50, head: 64, row: 28, wrap: 16, gap: 24, end: 150, pair: 8, sub: 20, head2: 28 }
+// A register row is 12px of padding plus 16px per line of its tallest zone; its heading gets a second line too.
+const H = { pad: 96, foot: 32, start: 236, contents: 44, line: 20, carry: 50, head: 64, row: 28, wrap: 16, gap: 24, end: 150, head2: 28 }
 // The KPI charts are drawn at fixed heights (px), so their share of the page is exact: highlights, tiles, trend, donuts, coverage, gaps.
 const KPI = { fact: 22, tiles: 92, trend: 196, donut: 160, coverage: 40, title: 20, gap: 20 }
 /** A KPI chart band; each one packs onto the page by itself, ahead of the indicator table's rows. */
@@ -35,6 +36,14 @@ const kpiParts = (c: Charts): [KpiPart, number][] => {
   return parts.filter(([, shown]) => shown).map(([p, , h]) => [p, h + KPI.gap])
 }
 const CHAR = 6.2 // average px per character at text-xs
+// Register zone widths (px): the left fits a full check # on one line, the right an amount and a short review.
+const ZONE = { left: 148, right: 124, gap: 24 }
+
+/** The register's label line: classifications as bare values, other columns as "Head: value". */
+const labelLine = (b: Table, cells: string[]) => [
+  ...b.zones!.tags.map((i) => cells[i]),
+  ...b.zones!.named.map((i) => cells[i] && `${b.cols[i].head}: ${cells[i]}`),
+].filter(Boolean).join(" · ")
 
 /** lead: the KPI chart bands; they take the first lead.length slots of heights, the table's rows the rest. */
 export type Block = Table & { body: string[][]; foot?: string[]; heights: number[]; lead: KpiPart[] }
@@ -47,9 +56,13 @@ export function layout(tables: Table[], paper: Paper, contents: boolean) {
     const show = (cells: Cell[]) => cells.map((v, i) => fmtCell(v, t.cols[i].fmt))
     const body = t.rows.map(show), foot = t.foot && show(t.foot)
     const extra = (cells: string[], idx: number[]) => H.wrap * Math.max(0, ...idx.map((i) => (t.cols[i].fmt === "text" ? lines(cells[i], t.cols[i].w) - 1 : 0)))
-    const heights = [...body, ...(foot ? [foot] : [])].map((cells) => t.lines
-      ? H.pair + t.lines.filter((idx) => idx.some((i) => cells[i])).reduce((s, idx) => s + H.sub + extra(cells, idx), 0)
-      : H.row + extra(cells, cells.map((_, i) => i)))
+    const mainW = 1 - (ZONE.left + ZONE.right + ZONE.gap) / textW
+    const zoned = (cells: string[]) => {
+      const z = t.zones!, label = labelLine(t, cells)
+      const main = z.main.reduce((n, i) => n + (cells[i] ? lines(cells[i], mainW) : 0), 0) + (label ? lines(label, mainW) : 0)
+      return 12 + H.wrap * Math.max(z.left.length, z.right.length, main)
+    }
+    const heights = [...body, ...(foot ? [foot] : [])].map((cells) => t.zones ? zoned(cells) : H.row + extra(cells, cells.map((_, i) => i)))
     // KPI chart bands go first, each its own slot, so a page takes as many as fit instead of all or none.
     const parts = t.charts ? kpiParts(t.charts) : []
     heights.unshift(...parts.map(([, h]) => h))
@@ -61,7 +74,7 @@ export function layout(tables: Table[], paper: Paper, contents: boolean) {
   })
   const clusters = new Set(blocks.flatMap((b) => b.cluster ?? [])).size
   const pages = paginate(blocks.map((b) => b.heights), {
-    ...H, heads: blocks.map((b) => H.head + (b.lines ? H.head2 : 0)), cap: PAPERS[paper][3] - H.pad - H.foot, start: H.start + (contents ? H.contents + H.line * (blocks.length + clusters) : 0),
+    ...H, heads: blocks.map((b) => H.head + (b.zones ? H.head2 : 0)), cap: PAPERS[paper][3] - H.pad - H.foot, start: H.start + (contents ? H.contents + H.line * (blocks.length + clusters) : 0),
   })
   return { blocks, pages }
 }
@@ -132,13 +145,37 @@ export function Contents({ blocks, startsOn }: { blocks: Block[]; startsOn: (i: 
   )
 }
 
-/** One row of a two-line table: each line a grid of its columns, the second indented under the first column. Empty lines are left out. */
-function Lines({ b, cells, className = "" }: { b: Block; cells: React.ReactNode[]; className?: string }) {
-  return b.lines!.map((idx, li) => idx.some((i) => cells[i]) && (
-    <div key={li} className="grid gap-x-2" style={{ gridTemplateColumns: idx.map((i) => `minmax(0, ${b.cols[i].w}fr)`).join(" "), paddingLeft: li ? `${b.cols[0].w * 100}%` : 0 }}>
-      {idx.map((i) => <div key={i} className={`break-words ${className} ${right(b.cols[i])}`}>{cells[i]}</div>)}
+/**
+ * One register row in three zones: identifiers stacked on the left (a dash holds an empty slot, so every row keeps
+ * the same shape), payee then particulars then the label line in the middle, amount, status and review on the right.
+ */
+function Zones({ b, cells, head = false, total = false }: { b: Block; cells: string[]; head?: boolean; total?: boolean }) {
+  const z = b.zones!, label = head ? "Classification" : labelLine(b, cells)
+  const join = (idx: number[]) => idx.map((i) => cells[i]).join(" / ")
+  const review = b.cols.length - 1
+  return (
+    <div className="grid gap-x-3" style={{ gridTemplateColumns: `${ZONE.left}px minmax(0, 1fr) ${ZONE.right}px` }}>
+      {head ? <>
+        <div>{join(z.left)}</div>
+        <div>{[join(z.main), label].filter(Boolean).join(" / ")}</div>
+        <div className="text-right">{join(z.right)}</div>
+      </> : <>
+        <div className="flex flex-col whitespace-nowrap">
+          {z.left.map((i) => <span key={i} className={cn(!cells[i] && "text-muted-foreground")}>{cells[i] || "—"}</span>)}
+        </div>
+        <div className="flex flex-col gap-0.5 break-words">
+          {z.main.map((i, k) => cells[i] && <span key={i} className={cn(k === 0 && "font-semibold")}>{cells[i]}</span>)}
+          {!total && label && <span className="text-muted-foreground">{label}</span>}
+        </div>
+        <div className="flex flex-col items-end text-right">
+          {z.right.map((i) => cells[i] && (
+            <span key={i} className={cn(b.cols[i].fmt !== "text" && "font-semibold",
+              i === review && (cells[i] === "OK" ? "text-muted-foreground" : "text-destructive"))}>{cells[i]}</span>
+          ))}
+        </div>
+      </>}
     </div>
-  ))
+  )
 }
 
 /** Rows [from, to) of one schedule: title (and cluster in the full report), basis, table, total row, notes. */
@@ -156,24 +193,24 @@ export function Schedule({ b, from, to, cluster }: { b: Block; from: number; to:
         {from === 0 && b.basis && <p className="text-xs text-muted-foreground">{b.basis}</p>}
       </div>
       {b.charts && parts.length > 0 && <KpiCharts c={b.charts} parts={parts} />}
-      {rt <= rf && !foot ? null : b.lines ? (
+      {rt <= rf && !foot ? null : b.zones ? (
         <T className="table-fixed border-y border-foreground/70 text-xs">
           <TableHeader>
             <TableRow className="border-foreground/70 bg-muted/60 hover:bg-muted/60">
-              <TableHead className="h-auto py-1.5 whitespace-normal"><Lines b={b} cells={b.cols.map((c) => c.head)} className="font-semibold" /></TableHead>
+              <TableHead className="h-auto py-1.5 font-semibold whitespace-normal"><Zones b={b} cells={b.cols.map((c) => c.head)} head /></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {b.body.slice(rf, rt).map((cells, ri) => (
-              <TableRow key={rf + ri} className="hover:bg-transparent">
-                <TableCell className="py-1 whitespace-normal tabular-nums"><Lines b={b} cells={cells} /></TableCell>
+              <TableRow key={rf + ri} className="break-inside-avoid hover:bg-transparent">
+                <TableCell className="py-1.5 align-top whitespace-normal tabular-nums"><Zones b={b} cells={cells} /></TableCell>
               </TableRow>
             ))}
           </TableBody>
           {foot && (
             <TableFooter className="border-foreground/70 bg-transparent">
               <TableRow className="border-b-[3px] border-double border-foreground/70 hover:bg-transparent">
-                <TableCell className="py-1.5 whitespace-normal tabular-nums"><Lines b={b} cells={b.foot!} className="font-bold" /></TableCell>
+                <TableCell className="py-1.5 font-bold whitespace-normal tabular-nums"><Zones b={b} cells={b.foot!} total /></TableCell>
               </TableRow>
             </TableFooter>
           )}

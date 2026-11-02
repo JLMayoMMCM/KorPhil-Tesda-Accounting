@@ -97,9 +97,11 @@ export type Cell = string | number | null
 /**
  * One schedule. no and cluster: its number and group in the report (none for the basis of preparation). basis: what it
  * was computed on, printed under the title. notes: definitions and caveats, printed under the table.
- * lines: when set, each row prints on two lines, these column indexes on each (w is then a share of its line).
+ * zones: when set, each row prints as three zones of column indexes (w is then unused): left, a stack of identifiers;
+ * main, the text with a label line (tags, values only; named, "Head: value") under it; right, amount and review.
  */
-export type Table = { kind: TableKind | "basis"; no?: number; cluster?: string; title: string; basis?: string; cols: Col[]; rows: Cell[][]; foot?: Cell[]; notes: string[]; lines?: [number[], number[]]; charts?: KpiCharts }
+export type Table = { kind: TableKind | "basis"; no?: number; cluster?: string; title: string; basis?: string; cols: Col[]; rows: Cell[][]; foot?: Cell[]; notes: string[]; zones?: Zones; charts?: KpiCharts }
+export type Zones = { left: number[]; main: number[]; tags: number[]; named: number[]; right: number[] }
 
 /**
  * The KPI schedule's figures drawn above its table: headline tiles, the monthly trend (amounts in centavos, months in
@@ -327,13 +329,16 @@ function review({ rows }: Ctx): Body {
   }
 }
 
-// Register, line 1: what identifies and pays the voucher; line 2: everything else the sheet shows.
-const TOP: Partial<Record<Field, number>> = { dv_date: 0.11, dv_no: 0.16, payee: 0.29, check_number: 0.12, gross_amount: 0.14 }
-const ROW_W = 0.06
+// Register zones by role: identifiers stack on the left, payee and particulars fill the middle, amount and status on the right.
+const LEFT: Field[] = ["dv_date", "dv_no", "check_number"]
+const MAIN: Field[] = ["payee", "particulars"]
+const RIGHT: Field[] = ["gross_amount", "status"]
+// Classifications print as bare values on the label line; any other column keeps its heading there.
+const CLASSES: Field[] = ["trade_area", "category", "diploma_st_assessment"]
 
 /**
  * Every voucher in scope, in date order, traceable to its sheet row: every column the sheet shows (sheet order, for the
- * CSV), printed on two lines per voucher: Row, DV date, DV #, payee, check #, amount, review; then the rest, indented.
+ * CSV), printed in three zones per voucher: Row, DV date, DV #, check #; payee, particulars, then the classifications; amount, status, review.
  */
 function audit({ rows, columns }: Ctx): Body {
   const list = [...rows].sort((a, b) => (a.dv ?? "9") < (b.dv ?? "9") ? -1 : (a.dv ?? "9") > (b.dv ?? "9") ? 1 : a.sheet_row - b.sheet_row)
@@ -341,27 +346,27 @@ function audit({ rows, columns }: Ctx): Body {
   const shown = columns.length
     ? columns.filter((c) => c.visibility !== "hidden").map((c) => ({ key: c.key, field: c.field, label: c.label }))
     : FIELDS.filter((f) => f !== "status").map((f) => ({ key: f, field: f, label: FIELD_LABELS[f] }))
-  const top = (c: (typeof shown)[number]) => c.field !== null && c.field in TOP
-  // Line 2 shares what the indent leaves: particulars four parts, every other column one.
-  const weight = (f: Field | null) => (f === "particulars" ? 4 : 1)
-  const rest = shown.filter((c) => !top(c)).reduce((s, c) => s + weight(c.field), 0)
   const cols: Col[] = [
-    { head: "Row", fmt: "int", w: ROW_W },
-    ...shown.map((c): Col => c.field === "gross_amount" ? { ...AMOUNT, w: TOP.gross_amount! }
-      : { head: c.label, fmt: "text", w: top(c) ? TOP[c.field!]! : ((1 - ROW_W) * weight(c.field)) / rest }),
-    { head: "Review", fmt: "text", w: 0.12 },
+    { head: "Row", fmt: "int", w: 0 },
+    ...shown.map((c): Col => c.field === "gross_amount" ? { ...AMOUNT, w: 0 } : { head: c.label, fmt: "text", w: 0 }),
+    { head: "Review", fmt: "text", w: 0 },
   ]
-  const at = (i: number) => (i === 0 || i === cols.length - 1 ? true : top(shown[i - 1]))
-  // Amount sits at the right of line 1, before Review, as amounts do on a register.
-  const amt = cols.findIndex((c) => c.head === AMOUNT.head), first = cols.map((_, i) => i).filter(at)
-  const lines: [number[], number[]] = [[...first.filter((i) => i !== amt && i !== cols.length - 1), ...(amt >= 0 ? [amt] : []), cols.length - 1], cols.map((_, i) => i).filter((i) => !at(i))]
-  // Total row: the label and count in the first two text columns of line 1, the sum under the amount.
+  const review = cols.length - 1
+  // Column indexes (Row is 0) for the given roles, in the roles' order.
+  const of = (fs: Field[]) => fs.flatMap((f) => shown.flatMap((c, i) => (c.field === f ? [i + 1] : [])))
+  const placed = new Set([...of(LEFT), ...of(MAIN), ...of(RIGHT)])
+  const rest = shown.map((_, i) => i + 1).filter((i) => !placed.has(i))
+  const zones = {
+    left: [0, ...of(LEFT)], main: of(MAIN), right: [...of(RIGHT), review],
+    tags: rest.filter((i) => CLASSES.includes(shown[i - 1].field!)), named: rest.filter((i) => !CLASSES.includes(shown[i - 1].field!)),
+  }
+  // Total row: the label and count where payee and particulars print, the sum under the amount.
   const foot: Cell[] = ["", ...shown.map((c) => (c.field === "gross_amount" ? total(rows) : "")), ""]
-  const free = lines[0].filter((i) => i > 0 && foot[i] === "").slice(0, 2)
+  const free = zones.main.length ? zones.main : zones.left.slice(1)
   ;[TOTAL, `${rows.length} vouchers`].forEach((v, k) => { if (free[k] !== undefined) foot[free[k]] = v })
   return {
-    basis: "Every voucher in scope, by DV date then sheet row; undated vouchers last. All columns shown in the sheet, two lines per voucher.",
-    cols, lines, foot,
+    basis: "Every voucher in scope, by DV date then sheet row; undated vouchers last. All columns shown in the sheet, one block per voucher.",
+    cols, zones, foot,
     rows: list.map((r) => [r.sheet_row, ...shown.map((c) => c.field === "gross_amount" ? r.amount : c.field ? r[c.field] : r.extra?.[c.key] ?? ""), r.issues.map((i) => ISSUES[i]).join(", ") || "OK"]),
     notes: [`Row: the voucher's row number in the sheet, to trace each line to its source. Text is as recorded in the sheet; ${AMOUNT.head} is the gross amount as read.`],
   }

@@ -283,7 +283,7 @@ export function ReviewQueue({ pairs, others, areas, dvNos, today }: Props) {
           {live.length > 0 && !visible.length && (
             <p className="py-10 text-center text-[13px] text-[#4a4e6a]">
               No open pairs match this filter.{" "}
-              <button type="button" className="font-semibold text-[#232a7c]" onClick={() => { setArea("All"); if (q) router.replace("/workspace/") }}>Clear filters</button>
+              <button type="button" className="font-semibold text-[#232a7c]" onClick={() => { setArea("All"); if (q) router.replace("/voucher/workspace/") }}>Clear filters</button>
             </p>
           )}
 
@@ -310,14 +310,14 @@ export function ReviewQueue({ pairs, others, areas, dvNos, today }: Props) {
               <details key={title} open={rows.length <= 10} className="pt-6">
                 <summary className="flex cursor-pointer items-center gap-2 px-3 pb-2 text-[13px] font-semibold">
                   {title}<span className="font-normal text-[#4a4e6a]">{rows.length}</span>
-                  <Link href={`/vouchers/?issue=${issue}`} className="ml-auto text-[12.5px] font-normal text-[#232a7c] hover:underline">Open in Vouchers</Link>
+                  <Link href={`/voucher/vouchers/?issue=${issue}`} className="ml-auto text-[12.5px] font-normal text-[#232a7c] hover:underline">Open in Vouchers</Link>
                 </summary>
                 <div className="border-t border-[#e3e5ee]">
                   {rows.map((v) => (
                     <div key={v.sheet_row} className="border-b border-[#e3e5ee] hover:bg-[#f6f7fb]">
                       <Line v={v} action={
                         <Button variant="outline" size="sm" className="justify-self-end" title="Open in Vouchers"
-                          render={<Link href={`/vouchers/?open=${v.sheet_row}`} />} nativeButton={false}>Open</Button>
+                          render={<Link href={`/voucher/vouchers/?open=${v.sheet_row}`} />} nativeButton={false}>Open</Button>
                       } />
                     </div>
                   ))}
@@ -349,7 +349,7 @@ export function ReviewQueue({ pairs, others, areas, dvNos, today }: Props) {
               const k = e.key.toLowerCase()
               if (k === "a" || k === "b") setTarget((t) => ({ ...t, [sel.dv]: k }))
               else if (k === "r") give(sel)
-              else if (k === "o") router.push(`/vouchers/?open=${sel[targetOf(sel)].sheet_row}`)
+              else if (k === "o") router.push(`/voucher/vouchers/?open=${sel[targetOf(sel)].sheet_row}`)
               else if (k === "j") move(1)
               else if (k === "k") move(-1)
               else return
@@ -485,7 +485,7 @@ function Compare({ pair: p, pos, count, target, auto, typed, today, problem, onT
 
       <div className="flex flex-none items-center gap-2 border-t border-[#e3e5ee] px-6 py-3">
         <Button variant="ghost" onClick={() => onMove(1)}>Skip</Button>
-        <Button variant="outline" className="ml-auto" render={<Link href={`/vouchers/?open=${v.sheet_row}`} />} nativeButton={false}>
+        <Button variant="outline" className="ml-auto" render={<Link href={`/voucher/vouchers/?open=${v.sheet_row}`} />} nativeButton={false}>
           Open {K} in Vouchers<Kbd>O</Kbd>
         </Button>
         <Button className={PRIMARY} disabled={!!err} onClick={onGive}>

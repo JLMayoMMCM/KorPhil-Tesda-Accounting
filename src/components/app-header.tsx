@@ -17,42 +17,46 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/in
 import { Kbd } from "@/components/ui/kbd"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { qs } from "@/lib/ledger"
+import { MODULES, type Module } from "@/lib/nav"
 import type { GoogleUser } from "@/lib/session"
 
-const TITLES: [string, string][] = [["/dashboard", "Dashboard"], ["/workspace", "Workspace"], ["/vouchers", "Vouchers"], ["/areas", "Trade Areas"], ["/reports", "Reports"], ["/settings", "Settings"]]
-
-export function AppHeader({ user, synced }: { user: GoogleUser; synced: string }) {
+export function AppHeader({ module, user, synced = "" }: { module: Module; user: GoogleUser; synced?: string }) {
   const path = usePathname()
   const params = useSearchParams()
-  const title = TITLES.find(([p]) => path.startsWith(p))?.[1] ?? "Workspace"
+  const title = MODULES[module].nav.find((i) => path.startsWith(i.href.slice(0, -1)))?.title ?? MODULES[module].name
   const name = `${user.first_name} ${user.last_name}`.trim() || user.email
   // Export follows the voucher list's filters when on it.
-  const exportUrl = "/vouchers/export/" + (path.startsWith("/vouchers") ? qs(params, { open: null, new: null }) : "")
+  const exportUrl = "/voucher/vouchers/export/" + (path.startsWith("/voucher/vouchers") ? qs(params, { open: null, new: null }) : "")
 
   return (
     <header className="print:hidden sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b bg-background px-4 py-2">
       <SidebarTrigger />
       <h1 className="mr-2 font-heading text-lg font-semibold">{title}</h1>
-      <Button render={<Link href="/vouchers/?new=1" />} nativeButton={false} data-key="n">
-        <PlusIcon data-icon="inline-start" />New DV<Kbd>N</Kbd>
-      </Button>
-      <Form action="/vouchers/" role="search" className="min-w-48 flex-1 md:max-w-sm">
-        <InputGroup>
-          <InputGroupAddon><SearchIcon /></InputGroupAddon>
-          <InputGroupInput
-            id="search" type="search" name="q" key={params.get("q")} defaultValue={params.get("q") ?? ""}
-            placeholder="Find DV #, payee, or particulars" aria-label="Find vouchers" autoComplete="off"
-          />
-          <InputGroupAddon align="inline-end"><Kbd>Ctrl K</Kbd></InputGroupAddon>
-        </InputGroup>
-      </Form>
-      <div className="ml-auto flex items-center gap-2">
-        <Button variant="outline" render={<Link href="/reports/" />} nativeButton={false} className="hidden xl:inline-flex">Run report</Button>
-        <Button variant="outline" render={<a href={exportUrl} download />} nativeButton={false}>
-          <DownloadIcon data-icon="inline-start" />Export
+      {/* The voucher tools; other modules get their own once they're built. */}
+      {module === "voucher" && <>
+        <Button render={<Link href="/voucher/vouchers/?new=1" />} nativeButton={false} data-key="n">
+          <PlusIcon data-icon="inline-start" />New DV<Kbd>N</Kbd>
         </Button>
-        {synced && <span className="hidden text-xs text-muted-foreground 2xl:inline">Synced {synced}</span>}
-        <SyncButton variant="outline">Sync</SyncButton>
+        <Form action="/voucher/vouchers/" role="search" className="min-w-48 flex-1 md:max-w-sm">
+          <InputGroup>
+            <InputGroupAddon><SearchIcon /></InputGroupAddon>
+            <InputGroupInput
+              id="search" type="search" name="q" key={params.get("q")} defaultValue={params.get("q") ?? ""}
+              placeholder="Find DV #, payee, or particulars" aria-label="Find vouchers" autoComplete="off"
+            />
+            <InputGroupAddon align="inline-end"><Kbd>Ctrl K</Kbd></InputGroupAddon>
+          </InputGroup>
+        </Form>
+      </>}
+      <div className="ml-auto flex items-center gap-2">
+        {module === "voucher" && <>
+          <Button variant="outline" render={<Link href="/voucher/reports/" />} nativeButton={false} className="hidden xl:inline-flex">Run report</Button>
+          <Button variant="outline" render={<a href={exportUrl} download />} nativeButton={false}>
+            <DownloadIcon data-icon="inline-start" />Export
+          </Button>
+          {synced && <span className="hidden text-xs text-muted-foreground 2xl:inline">Synced {synced}</span>}
+          <SyncButton variant="outline">Sync</SyncButton>
+        </>}
         <DropdownMenu>
           <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="rounded-full" aria-label={`Account: ${name}`} />}>
             <Avatar>

@@ -38,7 +38,7 @@ const plural = (n: number) => (n === 1 ? "" : "s")
 /** Rows per page, in menu order. */
 const PER = { "10": "10", "50": "50", "100": "100", all: "All" } as const
 
-export default async function Vouchers({ searchParams }: PageProps<"/vouchers">) {
+export default async function Vouchers({ searchParams }: PageProps<"/voucher/vouchers">) {
   const params = toParams(await searchParams)
   const { rows, error, pull, columns } = await getData()
   const shown = filterRows(rows, params)
@@ -52,7 +52,7 @@ export default async function Vouchers({ searchParams }: PageProps<"/vouchers">)
   const panelRow = rows.find((r) => String(r.sheet_row) === params.get("open")) ?? null
   const isNew = !panelRow && params.has("new")
   const panel = !!panelRow || isNew
-  const closeUrl = "/vouchers/" + qs(params, { open: null, new: null })
+  const closeUrl = "/voucher/vouchers/" + qs(params, { open: null, new: null })
 
   const chips: [string, string][] = []
   const area = params.get("area"), month = params.get("month"), issue = params.get("issue"), q = params.get("q"), year = params.get("year")
@@ -69,7 +69,7 @@ export default async function Vouchers({ searchParams }: PageProps<"/vouchers">)
   const wide = panel ? "hidden" : "hidden md:table-cell"
   const step = (to: number, text: string) => to < 1 || to > pages
     ? <Button variant="outline" size="sm" disabled>{text}</Button>
-    : <Button variant="outline" size="sm" render={<Link href={"/vouchers/" + qs(params, { page: String(to) })} />} nativeButton={false}>{text}</Button>
+    : <Button variant="outline" size="sm" render={<Link href={"/voucher/vouchers/" + qs(params, { page: String(to) })} />} nativeButton={false}>{text}</Button>
 
   return (
     <div className={cn("grid items-start gap-4", panel && "lg:grid-cols-[minmax(0,1fr)_22rem] xl:grid-cols-[minmax(0,1fr)_26rem]")}>
@@ -77,7 +77,7 @@ export default async function Vouchers({ searchParams }: PageProps<"/vouchers">)
         <nav aria-label="Voucher views" className="flex flex-wrap items-center gap-1 border-b pb-2">
           {(Object.entries(TABS) as [Tab, string][]).map(([key, name]) => (
             <Button key={key} size="sm" variant={key === tab ? "secondary" : "ghost"} aria-current={key === tab ? "page" : undefined}
-              render={<Link href={"/vouchers/" + qs(params, { tab: key, open: null, new: null, page: null })} />} nativeButton={false}>
+              render={<Link href={"/voucher/vouchers/" + qs(params, { tab: key, open: null, new: null, page: null })} />} nativeButton={false}>
               {name}<span className="text-muted-foreground tabular-nums">{rows.filter((r) => inTab(r, key)).length}</span>
             </Button>
           ))}
@@ -87,7 +87,7 @@ export default async function Vouchers({ searchParams }: PageProps<"/vouchers">)
                 <ListFilterIcon data-icon="inline-start" />Filter{filterCount ? ` · ${filterCount}` : ""}
               </PopoverTrigger>
               <PopoverContent align="end">
-                <Form action="/vouchers/">
+                <Form action="/voucher/vouchers/">
                   <input type="hidden" name="tab" value={tab} />
                   <input type="hidden" name="per" value={per} />
                   {q && <input type="hidden" name="q" value={q} />}
@@ -127,11 +127,11 @@ export default async function Vouchers({ searchParams }: PageProps<"/vouchers">)
         {(chips.length > 0 || !panel) && (
           <div className="flex flex-wrap items-center gap-2 text-sm">
             {chips.map(([text, url]) => (
-              <Badge key={text} variant="secondary" render={<Link href={"/vouchers/" + url} aria-label={`Remove filter: ${text}`} />}>
+              <Badge key={text} variant="secondary" render={<Link href={"/voucher/vouchers/" + url} aria-label={`Remove filter: ${text}`} />}>
                 {text}<XIcon data-icon="inline-end" />
               </Badge>
             ))}
-            {chips.length > 0 && <Link className="text-muted-foreground underline-offset-4 hover:underline" href={"/vouchers/" + clearUrl}>Clear filters</Link>}
+            {chips.length > 0 && <Link className="text-muted-foreground underline-offset-4 hover:underline" href={"/voucher/vouchers/" + clearUrl}>Clear filters</Link>}
             <span className="ml-auto font-medium tabular-nums">{shown.length} shown · {peso(total(shown))}</span>
           </div>
         )}
@@ -153,7 +153,7 @@ export default async function Vouchers({ searchParams }: PageProps<"/vouchers">)
               </TableHeader>
               <TableBody>
                 {pageRows.map((r) => {
-                  const openUrl = "/vouchers/" + qs(params, { open: String(r.sheet_row), new: null })
+                  const openUrl = "/voucher/vouchers/" + qs(params, { open: String(r.sheet_row), new: null })
                   const kind = [r.diploma_st_assessment, r.category].filter(Boolean).join(" · ")
                   return (
                     <LinkRow key={r.sheet_row} href={openUrl} data-state={panelRow?.sheet_row === r.sheet_row ? "selected" : undefined}>
@@ -205,7 +205,7 @@ export default async function Vouchers({ searchParams }: PageProps<"/vouchers">)
             </EmptyHeader>
             {chips.length > 0 && (
               <EmptyContent>
-                <Button variant="outline" render={<Link href={"/vouchers/" + clearUrl} />} nativeButton={false}>Clear filters</Button>
+                <Button variant="outline" render={<Link href={"/voucher/vouchers/" + clearUrl} />} nativeButton={false}>Clear filters</Button>
               </EmptyContent>
             )}
           </Empty>
@@ -213,7 +213,7 @@ export default async function Vouchers({ searchParams }: PageProps<"/vouchers">)
         {shown.length > 0 && (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground print:hidden">
             {!panel && <span>Click a row to open it in the side panel.</span>}
-            <Form action="/vouchers/" className="ml-auto flex items-center gap-2">
+            <Form action="/voucher/vouchers/" className="ml-auto flex items-center gap-2">
               {[...params].filter(([k]) => k !== "per" && k !== "page").map(([k, v], i) => <input key={i} type="hidden" name={k} value={v} />)}
               <label htmlFor="per">Rows per page</label>
               <AutoSubmitSelect id="per" name="per" size="sm" defaultValue={per}>

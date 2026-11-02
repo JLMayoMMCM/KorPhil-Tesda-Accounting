@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation"
 
-import { HOME } from "@/lib/nav"
+import { VOUCHER_HOME } from "@/lib/nav"
 
-/** "/" is the Dashboard. */
-export default function Root() {
-  redirect(HOME)
+/** "/voucher/" is the voucher Dashboard. */
+export default function VoucherRoot() {
+  redirect(VOUCHER_HOME)
 }

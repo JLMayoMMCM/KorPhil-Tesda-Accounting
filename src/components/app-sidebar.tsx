@@ -1,6 +1,6 @@
 "use client"
 
-import { ExternalLinkIcon, FileSpreadsheetIcon, FileTextIcon, HomeIcon, ListChecksIcon, MapIcon, ReceiptIcon, SettingsIcon } from "lucide-react"
+import { ExternalLinkIcon, FileSpreadsheetIcon } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
@@ -10,24 +10,24 @@ import {
   SidebarMenuButton, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem, SidebarRail,
 } from "@/components/ui/sidebar"
 import { TABS, type Tab } from "@/lib/ledger"
+import { MODULES, type Module, type NavItem } from "@/lib/nav"
 
-type Props = { counts: Record<Tab, number>; sheetTitle: string; synced: string; sheetUrl: string }
+type Props = { module: Module; counts?: Record<Tab, number>; sheetTitle: string; synced: string; sheetUrl: string }
 
-export function AppSidebar({ counts, sheetTitle, synced, sheetUrl }: Props) {
+export function AppSidebar({ module, counts, sheetTitle, synced, sheetUrl }: Props) {
   const path = usePathname()
   const tab = useSearchParams().get("tab") ?? "all"
-  const onVouchers = path.startsWith("/vouchers")
 
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" tooltip="KorPhil-TESDA" render={<Link href="/dashboard/" />}>
+            <SidebarMenuButton size="lg" tooltip="All modules" render={<Link href="/" />}>
               <Image src="/tesda_korphil_logo.png" alt="" width={32} height={32} />
               <span className="flex flex-col leading-tight">
                 <strong className="font-semibold">KorPhil-TESDA</strong>
-                <small className="text-sidebar-foreground/70">Disbursements</small>
+                <small className="text-sidebar-foreground/70">{MODULES[module].name}</small>
               </span>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -37,49 +37,31 @@ export function AppSidebar({ counts, sheetTitle, synced, sheetUrl }: Props) {
       <SidebarContent>
         <SidebarGroup>
           <SidebarMenu aria-label="Main">
-            <SidebarMenuItem>
-              <SidebarMenuButton isActive={path.startsWith("/dashboard")} tooltip="Dashboard" render={<Link href="/dashboard/" />}>
-                <HomeIcon />Dashboard
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton isActive={path.startsWith("/workspace")} tooltip="Workspace" render={<Link href="/workspace/" />}>
-                <ListChecksIcon />Workspace
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton isActive={onVouchers && tab === "all"} tooltip="Vouchers" render={<Link href="/vouchers/" />}>
-                <ReceiptIcon />Vouchers
-              </SidebarMenuButton>
-              <SidebarMenuBadge>{counts.all}</SidebarMenuBadge>
-              <SidebarMenuSub>
-                {(Object.entries(TABS) as [Tab, string][]).filter(([key]) => key !== "all").map(([key, name]) => (
-                  <SidebarMenuSubItem key={key}>
-                    <SidebarMenuSubButton isActive={onVouchers && tab === key} render={<Link href={`/vouchers/?tab=${key}`} />}>
-                      <span>{name}</span>
-                      <span className="ml-auto text-sidebar-foreground/70 tabular-nums">
-                        {counts[key]}
-                      </span>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                ))}
-              </SidebarMenuSub>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton isActive={path.startsWith("/areas")} tooltip="Trade Areas" render={<Link href="/areas/" />}>
-                <MapIcon />Trade Areas
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton isActive={path.startsWith("/reports")} tooltip="Reports" render={<Link href="/reports/" />}>
-                <FileTextIcon />Reports
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton isActive={path.startsWith("/settings")} tooltip="Settings" render={<Link href="/settings/" />}>
-                <SettingsIcon />Settings
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+            {(MODULES[module].nav as NavItem[]).map(({ title, href, icon: Icon, tabs }) => {
+              const here = path.startsWith(href.slice(0, -1))
+              return (
+                <SidebarMenuItem key={href}>
+                  <SidebarMenuButton isActive={here && (!tabs || tab === "all")} tooltip={title} render={<Link href={href} />}>
+                    <Icon />{title}
+                  </SidebarMenuButton>
+                  {tabs && counts && <>
+                    <SidebarMenuBadge>{counts.all}</SidebarMenuBadge>
+                    <SidebarMenuSub>
+                      {(Object.entries(TABS) as [Tab, string][]).filter(([key]) => key !== "all").map(([key, name]) => (
+                        <SidebarMenuSubItem key={key}>
+                          <SidebarMenuSubButton isActive={here && tab === key} render={<Link href={`${href}?tab=${key}`} />}>
+                            <span>{name}</span>
+                            <span className="ml-auto text-sidebar-foreground/70 tabular-nums">
+                              {counts[key]}
+                            </span>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </>}
+                </SidebarMenuItem>
+              )
+            })}
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>

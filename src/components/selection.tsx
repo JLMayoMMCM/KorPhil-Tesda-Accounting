@@ -64,7 +64,7 @@ function BulkBar({ verify }: { verify: boolean }) {
   if (!selected.size) return null
   const rows = items.filter((i) => selected.has(i.sheet_row))
   const sum = rows.reduce((a, r) => a + r.amount, 0)
-  const exportUrl = "/vouchers/export/?" + new URLSearchParams(rows.map((r) => ["sel", String(r.sheet_row)]))
+  const exportUrl = "/voucher/vouchers/export/?" + new URLSearchParams(rows.map((r) => ["sel", String(r.sheet_row)]))
   const mark = async (verified: boolean) => {
     const result = await run("Saving to the sheet…", () => setStatus(rows.map((r) => r.sheet_row), verified))
     if (result.ok) {

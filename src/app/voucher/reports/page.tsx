@@ -15,7 +15,7 @@ import { fullName } from "@/lib/session"
 
 export const metadata: Metadata = { title: "Reports" }
 
-export default async function Reports({ searchParams }: PageProps<"/reports">) {
+export default async function Reports({ searchParams }: PageProps<"/voucher/reports">) {
   const params = toParams(await searchParams)
   const { rows, pull, user, columns } = await getData()
   const generated = new Date()
@@ -42,7 +42,7 @@ export default async function Reports({ searchParams }: PageProps<"/reports">) {
 
   return (
     <div className="flex flex-col gap-4">
-      <Form action="/reports/" className="flex flex-col gap-3 print:hidden">
+      <Form action="/voucher/reports/" className="flex flex-col gap-3 print:hidden">
         <input type="hidden" name="report" value={kind} />
         {/* Carries the period over when the period type changes. */}
         {scope.by !== "month" && scope.to && <input type="hidden" name="month" value={scope.to} />}
@@ -81,7 +81,7 @@ export default async function Reports({ searchParams }: PageProps<"/reports">) {
           params.has("show") && ["", ...show].map((k) => <input key={k} type="hidden" name="show" value={k} />)
         )}
         <div className="flex flex-wrap items-center gap-2">
-          <Button render={<a href={"/reports/csv/" + qs(params)} download />} nativeButton={false}>
+          <Button render={<a href={"/voucher/reports/csv/" + qs(params)} download />} nativeButton={false}>
             <DownloadIcon data-icon="inline-start" />Download CSV
           </Button>
           <PrintButton />
@@ -96,7 +96,7 @@ export default async function Reports({ searchParams }: PageProps<"/reports">) {
               <h2 className="px-2.5 text-xs font-medium text-muted-foreground">{name}</h2>
               {kinds.map((k) => (
                 <Button key={k} variant={k === kind ? "secondary" : "ghost"} className="h-auto justify-start py-1.5 text-left whitespace-normal" aria-current={k === kind ? "page" : undefined}
-                  render={<Link href={"/reports/" + qs(params, { report: k })} />} nativeButton={false}>
+                  render={<Link href={"/voucher/reports/" + qs(params, { report: k })} />} nativeButton={false}>
                   {titleOf(k)}
                 </Button>
               ))}
