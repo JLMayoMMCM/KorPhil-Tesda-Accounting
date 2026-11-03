@@ -57,6 +57,11 @@ export function AppHeader({ module, user, synced = "" }: { module: Module; user:
           {synced && <span className="hidden text-xs text-muted-foreground 2xl:inline">Synced {synced}</span>}
           <SyncButton variant="outline">Sync</SyncButton>
         </>}
+        {module === "collection" && <>
+          <Button variant="outline" render={<Link href="/collection/reports/" />} nativeButton={false} className="hidden xl:inline-flex">Run report</Button>
+          {synced && <span className="hidden text-xs text-muted-foreground 2xl:inline">Synced {synced}</span>}
+          <SyncButton variant="outline" module="collection">Sync</SyncButton>
+        </>}
         <DropdownMenu>
           <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="rounded-full" aria-label={`Account: ${name}`} />}>
             <Avatar>

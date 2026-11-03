@@ -15,6 +15,10 @@ const RAW_KEYS = ["dv_no", "check_number", "payee"]
 export const SHEET_ID = process.env.GOOGLE_SHEET_ID ?? ""
 export const SHEET_RANGE = process.env.GOOGLE_SHEET_RANGE || "EXP"
 const TAB = `'${SHEET_RANGE.replaceAll("'", "''")}'` // quoted, so any tab name is a valid range
+// The collection module reads its own tab, in its own spreadsheet when COLLECTION_SHEET_ID is set (else the same one).
+// Read-only: no writes, settings or layout modes, and a cache of its own, so neither module's pull can disturb the other's.
+export const COLLECTION_SHEET_ID = process.env.COLLECTION_SHEET_ID || SHEET_ID
+export const COLLECTION_RANGE = process.env.COLLECTION_SHEET_RANGE || "Collection"
 const API_KEY = process.env.GOOGLE_SHEET_API_KEY ?? ""
 const API = "https://sheets.googleapis.com/v4/spreadsheets"
 
@@ -135,12 +139,12 @@ function toRows(values: Cell[][], model: SheetModel): RawVoucher[] {
   })
 }
 
-async function pullValues(token: string | null): Promise<[Cell[][], string | null]> {
-  if (!SHEET_ID || !(token || API_KEY)) return [[], "Google Sheet is not configured. Set GOOGLE_SHEET_ID in .env.local."]
+async function pullValues(token: string | null, id = SHEET_ID, tab = TAB): Promise<[Cell[][], string | null]> {
+  if (!id || !(token || API_KEY)) return [[], "Google Sheet is not configured. Set GOOGLE_SHEET_ID in .env.local."]
   try {
     // The whole used range (tab name alone), so added columns are seen.
     // Raw cell values, not display text: amounts keep every decimal whatever the cell format, dates arrive as serials.
-    return [(await call(valuesUrl(TAB, "?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER"), token)).values ?? [], null]
+    return [(await call(valuesUrl(tab, "?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER", id), token)).values ?? [], null]
   } catch (exc) {
     return [[], "Couldn't read the sheet: your Google account " + explain(exc)]
   }
@@ -182,8 +186,8 @@ async function send(token: string | null, url: string, method: string, body: unk
   }
 }
 
-const valuesUrl = (range: string, query: string) =>
-  `${API}/${SHEET_ID}/values/${encodeURIComponent(range)}${query}`
+const valuesUrl = (range: string, query: string, id = SHEET_ID) =>
+  `${API}/${id}/values/${encodeURIComponent(range)}${query}`
 
 type CellWrite = { row: number; key: string; value: string }
 /** What a write expects of its target rows: a voucher still holding the DV # last pulled, an empty row, or nothing. */
@@ -331,3 +335,25 @@ const present = (s: Saved | null) => !s ? [] : [
 ]
 
 export const sheetUrl = SHEET_ID ? `https://docs.google.com/spreadsheets/d/${SHEET_ID}` : ""
+
+// ---- Collection sheet (read-only) ----
+
+type CollectionPull = { ts: number; at: Date | null; title: string; values: Cell[][] }
+const collectionPull: CollectionPull = { ts: 0, at: null, title: "", values: [] }
+
+/** The Collection tab's cells and the spreadsheet's title, cached like the vouchers. Returns [pull, error]. */
+export async function fetchCollectionValues(token: string | null, force = false): Promise<[CollectionPull, string | null]> {
+  let error: string | null = null
+  if (force || Date.now() - collectionPull.ts > CACHE_SECONDS * 1000) {
+    const tab = `'${COLLECTION_RANGE.replaceAll("'", "''")}'`
+    const [[values, err], title] = await Promise.all([
+      pullValues(token, COLLECTION_SHEET_ID, tab),
+      call(`${API}/${COLLECTION_SHEET_ID}?fields=properties.title`, token).then((m) => String(m?.properties?.title ?? ""), () => collectionPull.title),
+    ])
+    error = err && err.replace("Couldn't read the sheet", `Couldn't read the ${COLLECTION_RANGE} tab`)
+    if (error === null) Object.assign(collectionPull, { ts: Date.now(), at: new Date(), title, values })
+  }
+  return [collectionPull, error]
+}
+
+export const collectionSheetUrl = COLLECTION_SHEET_ID ? `https://docs.google.com/spreadsheets/d/${COLLECTION_SHEET_ID}` : ""

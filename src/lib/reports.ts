@@ -53,7 +53,8 @@ const monthEnd = (m: string) => {
   const [y, mo] = m.split("-").map(Number)
   return `${longMonth(m)} ${new Date(Date.UTC(y, mo, 0)).getUTCDate()}, ${y}`
 }
-const span = (from: string, to: string) => {
+/** Months from "YYYY-MM" to "YYYY-MM", both included. */
+export const span = (from: string, to: string) => {
   const [fy, fm] = from.split("-").map(Number), [ty, tm] = to.split("-").map(Number)
   return (ty - fy) * 12 + tm - fm + 1
 }
@@ -100,7 +101,7 @@ export type Cell = string | number | null
  * zones: when set, each row prints as three zones of column indexes (w is then unused): left, a stack of identifiers;
  * main, the text with a label line (tags, values only; named, "Head: value") under it; right, amount and review.
  */
-export type Table = { kind: TableKind | "basis"; no?: number; cluster?: string; title: string; basis?: string; cols: Col[]; rows: Cell[][]; foot?: Cell[]; notes: string[]; zones?: Zones; charts?: KpiCharts }
+export type Table = { kind: string; no?: number; cluster?: string; title: string; basis?: string; cols: Col[]; rows: Cell[][]; foot?: Cell[]; notes: string[]; zones?: Zones; charts?: KpiCharts }
 export type Zones = { left: number[]; main: number[]; tags: number[]; named: number[]; right: number[] }
 
 /**

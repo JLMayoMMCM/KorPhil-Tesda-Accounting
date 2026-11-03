@@ -3,6 +3,7 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 
 import { blank, byIssue, DV_FORMAT, enrich, label, nextDvNo, filterRows, inTab, labelOf, median, monthsBack, paginate, parseAmount, parseDate, peso, qs, serialDate, sheetDate, total, yearThrough, type RawVoucher } from "./ledger.ts"
+import { collected, deposited, filterEntries, readCollections, undeposited } from "./collection.ts"
 import { classifyRow, colLetter, detectLayout, fixedLayout, HEADERS, inferType, layoutDiff, META, normalize, readSheet, savedFrom } from "./sheet-config.ts"
 
 let n = 5
@@ -202,4 +203,31 @@ test("generic column filter", () => {
   assert.equal(labelOf(rs.find((r) => r.dv_no === "E2")!, "x:Fund"), "Not set")
   assert.deepEqual(filterRows(rs, new URLSearchParams("col=x:Fund&is=GAA")).map((r) => r.dv_no), ["E1"])
   assert.deepEqual(filterRows(rs, new URLSearchParams("col=trade_area&is=ADMIN")).length, 2)
+})
+
+test("collection tab", () => {
+  // As the sheet has it: header row 1, totals in row 2, summary tables from column J (never read).
+  const H = ["Date", "Reference No./OR No.", "Payor", "UACS CODE", "Area", "Nature of Collection", "Collection", "Deposit", "Undeposited Collection", "AUGUST Collection"]
+  const values = [
+    H,
+    ["", "", "", "", "", "", 1600, 1500, 100, 999],
+    ["", "", "", "", "", "", "", "", "", "", "AUGUST"],
+    [46238, 104189, "ANA", "4020213000 - Income from Venue etc", "DORM", "DORM FEE", 1000, "", "", "Collection"],
+    [46239, 104190, "BEN", "4020203000 - Examination Fee", "", "AF", 500, "", ""],
+    [46239, 104190, "CY", "4020203000 - Examination Fee", "DCET", "AF", 100, "", ""],
+    [46240, 104191, "CANCELLED", "", "", "", "", "", ""],
+    ["", "", "DEPOSIT", "", "", "", "", 1500, ""], // undated deposit: dated from the row above it
+  ]
+  const r = readCollections(values)
+  assert.equal(r.error, null)
+  assert.deepEqual(r.layout!.columns, { date: 0, or_no: 1, payor: 2, uacs: 3, area: 4, nature: 5, collection: 6, deposit: 7 })
+  assert.deepEqual(r.skipped.map((s) => [s.row, s.reason]), [[2, "Totals or subtotal"], [7, "No amount"]])
+  assert.deepEqual([collected(r.entries), deposited(r.entries), undeposited(r.entries)], [160000, 150000, 10000]) // agrees with row 2
+  const dep = r.entries.find((e) => e.kind === "deposit")!
+  assert.deepEqual([dep.sheet_row, dep.iso, dep.issues], [8, "2026-08-06", []])
+  assert.deepEqual(r.entries.find((e) => e.payor === "BEN")!.issues, ["duplicate_or", "no_area"])
+  assert.equal(undeposited(r.entries, "2026-08-05"), 160000) // the deposit is dated 2026-08-06
+  assert.deepEqual(filterEntries(r.entries, new URLSearchParams("issue=any")).map((e) => e.payor).sort(), ["BEN", "CY"])
+  assert.deepEqual(filterEntries(r.entries, new URLSearchParams("area=DORM")).map((e) => e.payor), ["ANA"])
+  assert.match(readCollections([["Date", "Payor"]]).error!, /no column for Collection, Deposit/)
 })

@@ -38,6 +38,26 @@ export const HEADERS: Record<Field, string[]> = {
 export const REQUIRED: Field[] = ["dv_no", "dv_date", "gross_amount"]
 const SEARCH_ROWS = 20
 
+// ---- One spec per sheet, so each module reads its own tab without touching the other's ----
+
+/** A sheet's known columns: header text accepted per field, the fields it can't do without, and how far right to look. */
+export type Spec<F extends string> = { headers: Record<F, string[]>; required: F[]; lastCol?: number }
+export const DISBURSEMENT: Spec<Field> = { headers: HEADERS, required: REQUIRED }
+
+// The Collection tab: the ledger is A:I with headers in row 1; J onward holds hand-made summary tables, never read.
+export const COLLECTION_HEADERS = {
+  date: ["Date", "Collection date", "Date of collection"],
+  or_no: ["Reference No./OR No.", "OR No", "OR #", "Reference No", "Official Receipt No"],
+  payor: ["Payor", "Payer", "Name of Payor"],
+  uacs: ["UACS CODE", "UACS", "Account code"],
+  area: ["Area", "Trade area"],
+  nature: ["Nature of Collection", "Nature", "Particulars"],
+  collection: ["Collection", "Collections", "Amount collected"],
+  deposit: ["Deposit", "Deposits", "Amount deposited"],
+}
+export type CollectionField = keyof typeof COLLECTION_HEADERS
+export const COLLECTION: Spec<CollectionField> = { headers: COLLECTION_HEADERS, required: ["date", "collection", "deposit"], lastCol: 8 }
+
 /** "DV No." / "DV #" / "dv number" -> "dv no". */
 export function normalize(text: Cell | undefined): string {
   return String(text ?? "").toLowerCase()
@@ -48,7 +68,9 @@ export function normalize(text: Cell | undefined): string {
     .trim()
 }
 
-const ALIASES = new Map(Object.entries(HEADERS).flatMap(([f, names]) => names.map((n) => [normalize(n), f as Field])))
+const aliases = <F extends string>(spec: Spec<F>) =>
+  new Map(Object.entries<string[]>(spec.headers).flatMap(([f, names]) => names.map((n): [string, F] => [normalize(n), f as F])))
+const ALIASES = aliases(DISBURSEMENT)
 const fieldOf = (text: string) => ALIASES.get(normalize(text)) ?? null
 
 /** 0 -> "A", 25 -> "Z", 26 -> "AA". */
@@ -58,27 +80,27 @@ export function colLetter(index: number): string {
   return s
 }
 
-export type Layout = {
+export type Layout<F extends string = Field> = {
   headerRow: number // 1-indexed
   firstRow: number
-  columns: Partial<Record<Field, number>> // field -> 0-indexed column
-  headers: Partial<Record<Field, string>> // the sheet's own header text
+  columns: Partial<Record<F, number>> // field -> 0-indexed column
+  headers: Partial<Record<F, string>> // the sheet's own header text
   extras: { col: number; text: string }[] // labelled columns the app doesn't know
-  missing: Field[] // optional fields with no column
-  duplicates: Field[] // fields matched by more than one column (the first is used)
+  missing: F[] // optional fields with no column
+  duplicates: F[] // fields matched by more than one column (the first is used)
 }
 
 /** Match one row as a header row, joining a cell with the one above when it doesn't match alone. */
-function readHeader(values: Cell[][], i: number) {
-  const row = values[i] ?? [], above = values[i - 1] ?? []
-  const columns: Partial<Record<Field, number>> = {}, headers: Partial<Record<Field, string>> = {}
-  const duplicates: Field[] = []
+function readHeader<F extends string>(values: Cell[][], i: number, find: (text: string) => F | null, width: number) {
+  const row = (values[i] ?? []).slice(0, width), above = values[i - 1] ?? []
+  const columns: Partial<Record<F, number>> = {}, headers: Partial<Record<F, string>> = {}
+  const duplicates: F[] = []
   for (let j = 0; j < row.length; j++) {
     const text = String(row[j] ?? "").trim()
     if (!text) continue
     const joined = `${String(above[j] ?? "").trim()} ${text}`.trim()
-    const label = fieldOf(text) || i === 0 ? text : joined
-    const field = fieldOf(label)
+    const label = find(text) || i === 0 ? text : joined
+    const field = find(label)
     if (!field) continue
     if (field in columns) duplicates.push(field)
     else {
@@ -90,39 +112,44 @@ function readHeader(values: Cell[][], i: number) {
 }
 
 /** Column roles set by hand in Settings, by 0-indexed column: a field, or "none" for a plain extra column. */
-export type Roles = Record<number, Field | "none">
+export type Roles<F extends string = Field> = Record<number, F | "none">
 
 /**
  * Find the header row in the top rows: the one matching the most known headers, with every required field.
  * Roles set in Settings override what the header text says. Returns the layout, or an error saying what was missing.
  */
-export function detectLayout(values: Cell[][], overrides: typeof OVERRIDES = OVERRIDES, roles: Roles = {}): [Layout | null, string | null] {
+export function detectLayout<F extends string = Field>(
+  values: Cell[][], overrides: typeof OVERRIDES = OVERRIDES, roles: Roles<F> = {}, spec = DISBURSEMENT as unknown as Spec<F>,
+): [Layout<F> | null, string | null] {
+  const map = aliases(spec)
+  const find = (text: string) => map.get(normalize(text)) ?? null
+  const width = spec.lastCol === undefined ? Infinity : spec.lastCol + 1
   const candidates = overrides.headerRow ? [overrides.headerRow - 1] : [...Array(Math.min(SEARCH_ROWS, values.length)).keys()]
-  let best: (ReturnType<typeof readHeader> & { i: number }) | null = null
+  let best: (ReturnType<typeof readHeader<F>> & { i: number }) | null = null
   for (const i of candidates) {
-    const h = readHeader(values, i)
+    const h = readHeader(values, i, find, width)
     if (!best || Object.keys(h.columns).length > Object.keys(best.columns).length) best = { ...h, i }
   }
   if (!best) return [null, "The sheet is empty."]
   const { i, columns, headers, duplicates } = best
-  const row = values[i] ?? []
-  for (const [c, role] of Object.entries(roles)) {
+  const row = (values[i] ?? []).slice(0, width)
+  for (const [c, role] of Object.entries(roles) as [string, F | "none"][]) {
     const j = Number(c)
-    for (const f of Object.keys(columns) as Field[]) {
+    for (const f of Object.keys(columns) as F[]) {
       if (columns[f] !== j && f !== role) continue
       delete columns[f]
       delete headers[f]
     }
     if (role === "none") continue
     columns[role] = j
-    headers[role] = String(row[j] ?? "").trim() || HEADERS[role][0]
+    headers[role] = String(row[j] ?? "").trim() || spec.headers[role][0]
   }
   if (!Object.keys(columns).length) return [null, `No header row found in the top ${SEARCH_ROWS} rows.`]
-  const lacking = REQUIRED.filter((f) => !(f in columns))
-  if (lacking.length) return [null, `Header row ${i + 1} has no column for ${lacking.map((f) => HEADERS[f][0]).join(", ")}.`]
+  const lacking = spec.required.filter((f) => !(f in columns))
+  if (lacking.length) return [null, `Header row ${i + 1} has no column for ${lacking.map((f) => spec.headers[f][0]).join(", ")}.`]
   const used = new Set(Object.values(columns))
   const extras = row.flatMap((v, j) => (!used.has(j) && String(v ?? "").trim() ? [{ col: j, text: String(v).trim() }] : []))
-  const missing = (Object.keys(HEADERS) as Field[]).filter((f) => !(f in columns))
+  const missing = (Object.keys(spec.headers) as F[]).filter((f) => !(f in columns))
   return [{ columns, headers, extras, duplicates, headerRow: i + 1, firstRow: overrides.firstRow ?? i + 2, missing }, null]
 }
 

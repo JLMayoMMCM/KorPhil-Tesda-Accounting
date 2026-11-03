@@ -4,11 +4,12 @@ import { revalidatePath } from "next/cache"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 
+import { readCollections } from "@/lib/collection"
 import { getSession } from "@/lib/data"
 import { DV_FORMAT, FIELDS, FOR_REVIEW, nextDvNo, parseAmount, parseDate, sheetDate, todayManila, VERIFIED, type RawVoucher } from "@/lib/ledger"
 import { SESSION_COOKIE } from "@/lib/session"
 import { INPUT_TYPES, REQUIRED, VISIBILITY, type Column, type ColumnSetting, type InputType, type Saved, type Visibility } from "@/lib/sheet-config"
-import { appendVoucher, fetchVouchers, lastPull, readWith, saveSettings, setDvNo, setStatuses, updateVoucherCells } from "@/lib/sheets"
+import { appendVoucher, fetchCollectionValues, fetchVouchers, lastPull, readWith, saveSettings, setDvNo, setStatuses, updateVoucherCells } from "@/lib/sheets"
 
 export type Result = { ok: true; message: string } | { ok: false; message: string }
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -99,6 +100,13 @@ export async function sync(): Promise<Result> {
   if (error) return { ok: false, message: error }
   refresh()
   return { ok: true, message: `Pulled ${lastPull().rows} rows from the sheet.` }
+}
+
+export async function syncCollections(): Promise<Result> {
+  const [pull, error] = await fetchCollectionValues((await getSession()).access_token, true)
+  if (error) return { ok: false, message: error }
+  refresh()
+  return { ok: true, message: `Pulled ${readCollections(pull.values).entries.length} entries from the sheet.` }
 }
 
 export type LayoutResult = { ok: boolean; message: string } | null

@@ -83,7 +83,7 @@ const right = (c: Col) => (c.fmt === "text" ? "" : "text-right")
 const name = (b: Table) => (b.no ? `Schedule ${b.no}. ${b.title}` : b.title)
 
 /** Page 1: the office letterhead, as on its printed forms, then the report's title block. */
-export function Letterhead({ title, period, area }: { title: string; period: string; area: string }) {
+export function Letterhead({ title, period, area, office = "Disbursement report" }: { title: string; period: string; area: string; office?: string }) {
   return (
     <>
       <header className="grid grid-cols-[auto_1fr_auto] items-center gap-3 text-[#1b2a6b]">
@@ -100,7 +100,7 @@ export function Letterhead({ title, period, area }: { title: string; period: str
         <Image src="/tesda_korphil_logo.png" alt="Korea-Philippines Vocational Training Center" width={80} height={80} className="size-20" />
       </header>
       <div className="flex flex-col items-center gap-0.5 border-y-2 border-double border-foreground/70 py-2 text-center">
-        <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Accounting Office · Disbursement report</p>
+        <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Accounting Office · {office}</p>
         <h2 className="font-heading text-lg font-bold tracking-tight text-balance">{title}</h2>
         <p className="text-sm">{period}</p>
         <p className="text-xs text-muted-foreground">{area} · Amounts in Philippine pesos (₱)</p>

@@ -27,14 +27,14 @@ const config = {
 } satisfies ChartConfig
 
 /** Tooltip: the point's long label, then each series in full pesos (or `fmt`). */
-const tooltipWith = (fmt: (n: number) => string) => (
+const tooltipWith = (fmt: (n: number) => string, names: ChartConfig = config) => (
   <ChartTooltipContent
     labelFormatter={(_, payload) => (payload?.[0]?.payload as Point | undefined)?.tip ?? (payload?.[0]?.payload as Point | undefined)?.label}
     formatter={(value, name, item) => (
       <div className="flex w-full items-center justify-between gap-4">
         <span className="flex items-center gap-1.5 text-muted-foreground">
           {name !== "value" && <span aria-hidden="true" className="size-2.5 rounded-[2px]" style={{ background: item.color }} />}
-          {config[name as keyof typeof config]?.label ?? "Amount"}
+          {names[name as keyof typeof names]?.label ?? "Amount"}
         </span>
         <span className="font-medium text-foreground tabular-nums">{fmt(Number(value))}</span>
       </div>
@@ -198,8 +198,13 @@ function RangeCalendar({ first, last, range, marked, onPick }: {
   )
 }
 
-/** Disbursed amounts as stacked areas (verified under for review), by day, week, month or quarter, over the whole period or any date range inside it. */
-export function TrendChart({ days, from: first, to: last }: { days: Day[]; from: string; to: string }) {
+/**
+ * Disbursed amounts as stacked areas (verified under for review), by day, week, month or quarter, over the whole period or any date range inside it.
+ * `single` draws only the lower series (each day's `verified`), under that name: one amount, such as money collected.
+ */
+export function TrendChart({ days, from: first, to: last, single }: { days: Day[]; from: string; to: string; single?: string }) {
+  const series = single ? { ...config, verified: { ...config.verified, label: single } } : config
+  const keys = single ? (["verified"] as const) : (["verified", "pending"] as const)
   const [unit, setUnit] = useState<Unit>("month")
   const [[a, b], setRange] = useState<[string, string]>([first, last])
   const points = new Map<string, Point & { verified: number }>()
@@ -258,21 +263,22 @@ export function TrendChart({ days, from: first, to: last }: { days: Day[]; from:
         </Popover>
         <span className="ml-auto font-medium text-foreground tabular-nums">{peso(shown.reduce((t, d) => t + d.value, 0))}</span>
       </div>
-      <ChartContainer config={config} className="aspect-auto h-full min-h-64 w-full">
+      <ChartContainer config={series} className="aspect-auto h-full min-h-64 w-full">
         {shown.length < 3 ? (
           <BarChart data={stacked} margin={{ left: 4, right: 12, top: 8 }}>
             <CartesianGrid vertical={false} />
             <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
             <YAxis tickLine={false} axisLine={false} width={56} tickFormatter={(v: number) => compact(v)} />
-            <ChartTooltip cursor={false} content={tooltip} />
-            <Bar dataKey="verified" stackId="k" fill="var(--color-verified)" maxBarSize={72} />
-            <Bar dataKey="pending" stackId="k" fill="var(--color-pending)" radius={[6, 6, 0, 0]} maxBarSize={72} />
+            <ChartTooltip cursor={false} content={tooltipWith(peso, series)} />
+            {keys.map((k, i) => (
+              <Bar key={k} dataKey={k} stackId="k" fill={`var(--color-${k})`} radius={i === keys.length - 1 ? [6, 6, 0, 0] : undefined} maxBarSize={72} />
+            ))}
             <ChartLegend content={<ChartLegendContent />} />
           </BarChart>
         ) : (
           <AreaChart data={stacked} margin={{ left: 4, right: 12, top: 8 }}>
             <defs>
-              {(["verified", "pending"] as const).map((k) => (
+              {keys.map((k) => (
                 <linearGradient key={k} id={fill + k} x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor={`var(--color-${k})`} stopOpacity={k === "verified" ? 0.45 : 0.6} />
                   <stop offset="95%" stopColor={`var(--color-${k})`} stopOpacity={0.05} />
@@ -282,14 +288,15 @@ export function TrendChart({ days, from: first, to: last }: { days: Day[]; from:
             <CartesianGrid vertical={false} />
             <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} minTickGap={16} />
             <YAxis tickLine={false} axisLine={false} width={56} tickFormatter={(v: number) => compact(v)} />
-            <ChartTooltip cursor={false} content={tooltip} />
-            <Area dataKey="verified" stackId="k" type="monotone" fill={`url(#${fill}verified)`} stroke="var(--color-verified)" strokeWidth={2} />
-            <Area dataKey="pending" stackId="k" type="monotone" fill={`url(#${fill}pending)`} stroke="var(--color-pending)" strokeWidth={2} />
+            <ChartTooltip cursor={false} content={tooltipWith(peso, series)} />
+            {keys.map((k) => (
+              <Area key={k} dataKey={k} stackId="k" type="monotone" fill={`url(#${fill}${k})`} stroke={`var(--color-${k})`} strokeWidth={2} />
+            ))}
             <ChartLegend content={<ChartLegendContent />} />
           </AreaChart>
         )}
       </ChartContainer>
-      <Figures caption="Amount by DV date" data={shown} />
+      <Figures caption={single ? `${single} by date` : "Amount by DV date"} data={single ? shown.map((d) => ({ ...d, verified: undefined })) : shown} />
     </div>
   )
 }
