@@ -3,20 +3,17 @@ import type { Metadata } from "next"
 import Link from "next/link"
 
 import { compact } from "@/components/charts"
-import { AreaSummary, DonutChart, RankedBars, SectionWheel, TrendChart, type AreaStat, type Day, type Point } from "@/components/dashboard-charts"
+import { AreaSummary, DonutChart, RankedBars, SectionWheel, TrendChart, type AreaStat, type Breakdown, type Day, type Point } from "@/components/dashboard-charts"
 import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Popover, PopoverContent, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover"
-import { getData } from "@/lib/data"
-import { byIssue, group, isVerified, ISSUES, label, labelOf, longMonth, monthLabel, months, monthsBack, peso, qs, total, yearThrough, type Voucher } from "@/lib/ledger"
+import { clock, getData } from "@/lib/data"
+import { byIssue, group, isVerified, ISSUES, label, labelOf, longMonth, NOT_SET, monthLabel, months, monthsBack, peso, qs, total, yearThrough, type Voucher } from "@/lib/ledger"
 import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = { title: "Dashboard" }
-
-// Program slices step through the chart ramp so neighbours differ in lightness, not just hue.
-const RAMP = ["var(--chart-5)", "var(--chart-3)", "var(--chart-1)", "var(--chart-4)", "var(--chart-2)"]
 
 // Soft panels: rounded, hairline border instead of a ring, barely-there shadow.
 const PANEL = "rounded-2xl ring-0 border shadow-xs"
@@ -40,7 +37,7 @@ const change = (now: number, before: number, against: string) => {
 
 /** Overview of the whole sheet: how much is verified, what blocks the rest, and the shape of the money. */
 export default async function Dashboard({ searchParams }: PageProps<"/voucher/dashboard">) {
-  const { rows: everything, error, today, columns } = await getData()
+  const { rows: everything, error, today, columns, pull } = await getData()
   // Scope: one calendar year (Jan–Dec, default this year) or "all". Undated vouchers only show under All years.
   const years = [...new Set([today.slice(0, 4), ...months(everything).map((m) => m.slice(0, 4))])].sort().reverse()
   const { year: asked, month: askedMonth, by: askedBy } = await searchParams
@@ -147,23 +144,33 @@ export default async function Dashboard({ searchParams }: PageProps<"/voucher/da
     const done = list.filter(isVerified)
     return { name, n, amt, done: done.length, doneAmt: total(done) }
   })
-  const topFive = (list: Voucher[], by: (r: Voucher) => string, href?: (name: string) => string): Point[] =>
-    group(list, by).filter(([name]) => name).slice(0, 5).map(([name, , amt]) => ({ label: name, value: amt, href: href?.(name) }))
-  const statFor = (name: string, list: Voucher[], href: string): AreaStat => {
-    const done = list.filter(isVerified), flagged = list.filter((r) => r.issues.length && !isVerified(r))
-    const amount = total(list)
+  // A voucher-list link inside one group (null = All). None when it would need a second column filter: the list filters one column at a time.
+  const within = (name: string | null, changes: Record<string, string>) =>
+    name && by?.field !== "trade_area" && "col" in changes ? undefined : link({ ...(name ? filter(name) : {}), ...changes })
+  /** The top n named rows, and the rest (other names, and "Not set" kept apart) so they add up to the group's amount. */
+  const breakdown = (list: Voucher[], key: (r: Voucher) => string, n: number, href: (name: string) => string | undefined): Breakdown => {
+    const groups = group(list, key), named = groups.filter(([k]) => k !== NOT_SET), missing = groups.find(([k]) => k === NOT_SET)
+    const rest = named.slice(n)
     return {
-      name, href, vouchers: list.length, amount, verifiedCount: done.length, verifiedAmount: total(done),
-      pendingCount: list.length - done.length, flagged: flagged.length, average: list.length ? Math.round(amount / list.length) : 0,
-      payees: topFive(list, (r) => r.payee.trim(), (n) => link({ q: n })),
-      categories: topFive(list, (r) => label(r, "category")),
-      programs: group(list, (r) => label(r, "diploma_st_assessment")).slice(0, 4).map(([n, , amt], i) => ({ label: n, value: amt, color: RAMP[i] })),
+      top: named.slice(0, n).map(([name, , amt]) => ({ label: name, value: amt, href: href(name) })),
+      other: rest.reduce((sum, [, , amt]) => sum + amt, 0), otherCount: rest.length,
+      missing: missing?.[2] ?? 0, missingCount: missing?.[1] ?? 0,
     }
   }
-  const areaStats: AreaStat[] = [
-    statFor(`All · ${by?.label ?? ""}`, rows, link({ tab: "pending" })),
-    ...areas.map((a) => statFor(a.name, rows.filter((r) => keyOf(r) === a.name), link({ tab: "pending", ...filter(a.name) }))),
-  ]
+  const statFor = (name: string | null, list: Voucher[]): AreaStat => {
+    const done = list.filter(isVerified)
+    return {
+      name: name ?? "All", missing: name === NOT_SET, href: within(name, {})!, reviewHref: within(name, { tab: "pending" })!, fixHref: within(name, { issue: "any" })!,
+      vouchers: list.length, amount: total(list), verifiedCount: done.length, verifiedAmount: total(done),
+      pendingCount: list.length - done.length, flagged: list.filter((r) => r.issues.length && !isVerified(r)).length,
+      payees: breakdown(list, (r) => r.payee.trim() || NOT_SET, 5, (p) => within(name, { q: p })),
+      categories: breakdown(list, (r) => label(r, "category"), 4, (c) => within(name, { col: "category", is: c })),
+      programs: breakdown(list, (r) => label(r, "diploma_st_assessment"), 3, (p) => within(name, { col: "diploma_st_assessment", is: p })),
+    }
+  }
+  const areaStats: AreaStat[] = [statFor(null, rows), ...areas.map((a) => statFor(a.name, rows.filter((r) => keyOf(r) === a.name)))]
+  const synced = clock(pull.at)
+  const scopeLine = `${year === "all" ? "All years" : `January – December ${year}`}, by DV date${synced ? ` · synced from the sheet at ${synced}` : ""}`
 
   // Summary sentences: each a fact the page also shows.
   const now = total(monthRows), before = total(lastRows), lastName = longMonth(lastMonth + "-01")
@@ -320,7 +327,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/voucher/da
       </section>
 
       {by && (
-        <ChartCard title={`Summary per ${by.label.toLowerCase()}`} description="Pick one to see its figures, payees, categories and programs" className={cn(SNAP, SCREEN_MIN)}>
+        <ChartCard title={`Summary per ${by.label.toLowerCase()}`} description={scopeLine} className={cn(SNAP, SCREEN_MIN)}>
           {groupings.length > 1 && (
             <nav aria-label="Group by" className="mb-3 flex flex-wrap items-center gap-1 print:hidden">
               <span className="mr-1 text-sm text-muted-foreground">Group by</span>
@@ -332,7 +339,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/voucher/da
               ))}
             </nav>
           )}
-          <AreaSummary key={by.key} stats={areaStats} />
+          <AreaSummary key={by.key} stats={areaStats} noun={by.label} />
         </ChartCard>
       )}
     </div>

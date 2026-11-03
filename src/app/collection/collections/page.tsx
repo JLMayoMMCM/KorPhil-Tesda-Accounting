@@ -136,7 +136,8 @@ export default async function Collections({ searchParams }: PageProps<"/collecti
                     )}
                   </TableCell>
                   <TableCell className="hidden align-top whitespace-normal md:table-cell">
-                    <div>{e.uacs ? account(e.uacs) : "—"}</div>
+                    <div className="tabular-nums">{e.uacs.match(/^\s*(\d{6,})/)?.[1] ?? (e.uacs ? account(e.uacs) : "—")}</div>
+                    {/^\s*\d{6,}/.test(e.uacs) && <div className="text-xs text-muted-foreground">{account(e.uacs)}</div>}
                     <div className="text-xs text-muted-foreground">{e.area}</div>
                   </TableCell>
                   <TableCell className="text-right align-top tabular-nums">{e.collected ? peso(e.collected) : ""}</TableCell>

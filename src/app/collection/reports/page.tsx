@@ -1,4 +1,4 @@
-import { DownloadIcon } from "lucide-react"
+import { DownloadIcon, FileTextIcon } from "lucide-react"
 import type { Metadata } from "next"
 import Form from "next/form"
 import Link from "next/link"
@@ -66,6 +66,9 @@ export default async function CollectionReports({ searchParams }: PageProps<"/co
         <div className="flex flex-wrap items-center gap-2">
           <Button render={<a href={"/collection/reports/csv/" + qs(params)} download />} nativeButton={false}>
             <DownloadIcon data-icon="inline-start" />Download CSV
+          </Button>
+          <Button variant="outline" render={<a href={"/collection/reports/docx/" + qs(params)} download />} nativeButton={false}>
+            <FileTextIcon data-icon="inline-start" />Download Word
           </Button>
           <PrintButton />
           <span className="text-sm text-muted-foreground tabular-nums">{pages.length} page{pages.length === 1 ? "" : "s"}</span>

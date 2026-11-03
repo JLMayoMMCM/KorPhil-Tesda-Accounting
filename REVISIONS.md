@@ -180,3 +180,21 @@ Net: about -730 lines, -0 deps (`shadcn`, `server-only` and `cn` are all used: `
 ### Follow-ups
 
 - [ ] **Browser check:** the report needs a Google sign-in; the new basis/notes heights in `layout()` are estimates and not yet checked on screen or in print.
+
+## R7 · Dashboards, review colours and Word export · 2026-11-03
+
+**Goal:** clearer dashboards in both modules, one colour for "for review" everywhere, and reports staff can edit in Word.
+
+### Done
+
+- [x] **Word export (exception to the PRODUCT.md constraint, asked for by the accounting office):** each report page has **Download Word** next to Download CSV. `src/lib/docx.ts` writes the .docx with Node's own zlib (no new dependency): letterhead text, title and scope, each schedule with its basis, highlights, table (header repeats on each page, total row) and notes, on the report's paper size. Opened and checked in Microsoft Word.
+- [x] **Vouchers dashboard:** trend chart redrawn (smooth line, peso axis, no grid, dots per month or week, verified drawn over the for-review band, ends at the last date with data); the By quarter crash fixed; the per-group summary is a searchable, sortable list beside the selected group's figures.
+- [x] **Collection dashboard:** chart starts at the first month with collections; UACS as ranked bars with a total; Deposits as a donut by type (LDDAP, check, cash, other) with the latest three; Exceptions renamed Needs review. The year/month switcher and the four figure tiles are unchanged.
+- [x] **For review** uses the Ready to verify blue (`--review`) for marks, bars and chart bands; the voucher panel's Status field takes its state's colour; dropdown lists are styled where the browser supports it.
+- [x] Collections list shows the UACS code; every page has a loading skeleton.
+- [x] `tsc`, `eslint`, `node --experimental-strip-types --test` and `next build` pass.
+
+### Follow-ups
+
+- [ ] **Browser check (signed in):** dashboards, trade-area list, Status field and the Word downloads on real data.
+- [ ] `npm test` needs Node 22.18+ (or `--experimental-strip-types`) to run the `.ts` tests.

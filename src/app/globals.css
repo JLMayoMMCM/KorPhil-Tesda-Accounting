@@ -29,6 +29,8 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-review: var(--review);
+  --color-review-foreground: var(--review-foreground);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -66,6 +68,9 @@
   --accent: oklch(0.96 0.002 17.2);
   --accent-foreground: oklch(0.214 0.009 43.1);
   --destructive: oklch(0.577 0.245 27.325);
+  /* "For review": the dashboard's "Ready to verify" blue for marks, bars and chart bands; its text stays in ink (the blue is too light to read). */
+  --review: var(--chart-1);
+  --review-foreground: var(--foreground);
   --border: oklch(0.922 0.005 34.3);
   --input: oklch(0.922 0.005 34.3);
   --ring: oklch(0.714 0.014 41.2);
@@ -103,6 +108,8 @@
   --accent: oklch(0.268 0.011 36.5);
   --accent-foreground: oklch(0.986 0.002 67.8);
   --destructive: oklch(0.704 0.191 22.216);
+  --review: var(--chart-1);
+  --review-foreground: var(--foreground);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.547 0.021 43.1);
@@ -164,5 +171,51 @@
 @keyframes login-rings {
   to {
     scale: 1.06;
+  }
+}
+
+/* Dropdowns: the open list drawn like the app's menus where the browser can (Chrome/Edge 135+); elsewhere the system list stays. */
+@supports (appearance: base-select) {
+  [data-slot="native-select"],
+  [data-slot="native-select"]::picker(select) {
+    appearance: base-select;
+  }
+  [data-slot="native-select"]::picker-icon {
+    display: none; /* NativeSelect draws its own chevron */
+  }
+  [data-slot="native-select"]::picker(select) {
+    margin-block: 4px;
+    padding: 4px;
+    max-height: 18rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--popover);
+    color: var(--popover-foreground);
+    box-shadow: 0 10px 30px rgb(22 24 48 / 0.14);
+  }
+  [data-slot="native-select-option"] {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    font-size: 0.875rem;
+  }
+  [data-slot="native-select-option"]:is(:hover, :focus-visible) {
+    background: var(--accent);
+    outline: none;
+  }
+  [data-slot="native-select-option"]:checked {
+    font-weight: 600;
+  }
+  [data-slot="native-select-option"][value=""] {
+    color: var(--muted-foreground); /* "Not set" */
+  }
+  [data-slot="native-select-option"]::checkmark {
+    order: 1;
+    margin-inline-start: auto;
+    color: var(--primary);
   }
 }

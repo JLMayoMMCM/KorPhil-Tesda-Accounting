@@ -3,17 +3,21 @@
 // Interactive Recharts views for the Dashboard, after shadcn's dashboard-01 block.
 // Amounts arrive in centavos from the server page; every chart also carries a screen-reader list of its figures.
 import Link from "next/link"
-import { useEffect, useId, useState } from "react"
+import { useRouter } from "next/navigation"
+import { useEffect, useId, useRef, useState } from "react"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Label, Pie, PieChart, XAxis, YAxis } from "recharts"
 
-import { CalendarIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ListFilterIcon } from "lucide-react"
+import { CalendarIcon, CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CircleAlertIcon, InfoIcon, ListFilterIcon, SearchIcon } from "lucide-react"
 import { compact } from "@/components/charts"
 import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Input } from "@/components/ui/input"
+import { Kbd } from "@/components/ui/kbd"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { longDate, longMonth, monthLabel, monthsBack, peso, shortDate } from "@/lib/ledger"
 import { cn } from "@/lib/utils"
 
@@ -23,7 +27,7 @@ export type Point = { id?: string; label: string; value: number; verified?: numb
 const config = {
   value: { label: "Amount", color: "var(--primary)" },
   verified: { label: "Verified", color: "var(--primary)" },
-  pending: { label: "For review", color: "var(--chart-1)" },
+  pending: { label: "For review", color: "var(--review)" },
 } satisfies ChartConfig
 
 /** Tooltip: the point's long label, then each series in full pesos (or `fmt`). */
@@ -211,7 +215,8 @@ export function TrendChart({ days, from: first, to: last, single }: { days: Day[
   for (let d = a; d <= b; d = addDays(d, 1)) {
     const id = bucket(d, unit)
     if (points.has(id)) continue
-    const start = id < a ? a : id, stop = addDays(id, 6) > b ? b : addDays(id, 6)
+    // Only a week id is a date; "2026-Q1" would throw in addDays.
+    const start = id < a ? a : id, stop = unit !== "week" || addDays(id, 6) > b ? b : addDays(id, 6)
     points.set(id, {
       id, value: 0, verified: 0,
       label: unit === "quarter" ? id.slice(5) : unit === "month" ? monthLabel(id).slice(0, 3) : shortDate(unit === "week" ? start : id),
@@ -223,8 +228,25 @@ export function TrendChart({ days, from: first, to: last, single }: { days: Day[
     const p = d.date >= a && d.date <= b ? points.get(bucket(d.date, unit)) : undefined
     if (p) { p.value += d.value; p.verified += d.verified }
   }
-  const shown = [...points.values()]
+  // Start at the first date with amounts and end at the last, so empty months before and after don't read as ₱0.
+  const dated = days.filter((d) => d.value && d.date >= a && d.date <= b).map((d) => d.date).sort()
+  const shown = [...points.values()].filter((p) => !dated.length || (p.id! >= bucket(dated[0], unit) && p.id! <= bucket(dated.at(-1)!, unit)))
   const stacked = shown.map((d) => ({ ...d, pending: d.value - d.verified }))
+  const end = stacked.at(-1)
+  type Dot = { cx?: number; cy?: number; index: number; payload: { pending: number } }
+  /** A series' point marker: the end value on the top series' last point, else a month/week dot when `on`. */
+  const mark = (color: string, top: boolean, on: (p: Dot) => boolean) => function Mark(p: Dot) {
+    if (top && p.index === stacked.length - 1 && end) return (
+      <g key={p.index}>
+        <circle cx={p.cx} cy={p.cy} r={5.5} className="fill-foreground" stroke="var(--background)" strokeWidth={2} />
+        <text x={(p.cx ?? 0) + 12} y={(p.cy ?? 0) + 5} className="fill-foreground text-sm font-semibold tabular-nums">{compact(end.value)}</text>
+        <text x={(p.cx ?? 0) + 12} y={(p.cy ?? 0) + 21} className="fill-muted-foreground text-xs">{end.label}</text>
+      </g>
+    )
+    return unit !== "day" && on(p) && !(p.index === stacked.length - 1 && !single)
+      ? <circle key={p.index} cx={p.cx} cy={p.cy} r={4} fill={color} stroke="var(--background)" strokeWidth={2} />
+      : <g key={p.index} />
+  }
   const custom = a !== first || b !== last
   const [qa, qb] = quarter(a.slice(0, 4), quarterOf(a))
   const isQuarter = custom && a === (qa < first ? first : qa) && b === (qb > last ? last : qb)
@@ -273,26 +295,30 @@ export function TrendChart({ days, from: first, to: last, single }: { days: Day[
             {keys.map((k, i) => (
               <Bar key={k} dataKey={k} stackId="k" fill={`var(--color-${k})`} radius={i === keys.length - 1 ? [6, 6, 0, 0] : undefined} maxBarSize={72} />
             ))}
-            <ChartLegend content={<ChartLegendContent />} />
+            {!single && <ChartLegend content={<ChartLegendContent />} />}
           </BarChart>
         ) : (
-          <AreaChart data={stacked} margin={{ left: 4, right: 12, top: 8 }}>
+          <AreaChart data={stacked} margin={{ left: 4, right: 76, top: 12 }}>
             <defs>
-              {keys.map((k) => (
-                <linearGradient key={k} id={fill + k} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={`var(--color-${k})`} stopOpacity={k === "verified" ? 0.45 : 0.6} />
-                  <stop offset="95%" stopColor={`var(--color-${k})`} stopOpacity={0.05} />
-                </linearGradient>
-              ))}
+              <linearGradient id={fill} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="var(--color-verified)" stopOpacity={0.2} />
+                <stop offset="100%" stopColor="var(--color-verified)" stopOpacity={0} />
+              </linearGradient>
             </defs>
-            <CartesianGrid vertical={false} />
-            <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} minTickGap={16} />
-            <YAxis tickLine={false} axisLine={false} width={56} tickFormatter={(v: number) => compact(v)} />
-            <ChartTooltip cursor={false} content={tooltipWith(peso, series)} />
-            {keys.map((k) => (
-              <Area key={k} dataKey={k} stackId="k" type="monotone" fill={`url(#${fill}${k})`} stroke={`var(--color-${k})`} strokeWidth={2} />
-            ))}
-            <ChartLegend content={<ChartLegendContent />} />
+            {/* No gridlines: peso labels on the left, one faint baseline. */}
+            <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: "var(--border)" }} tickMargin={8} minTickGap={16} />
+            <YAxis tickLine={false} axisLine={false} width={56} tickCount={4} tickFormatter={(v: number) => compact(v)} />
+            <ChartTooltip cursor={{ stroke: "var(--muted-foreground)", strokeDasharray: "3 3" }} content={tooltipWith(peso, series)} />
+            {/* Verified under for review, stacked; for review is a band with its own top edge and a dot only where it isn't 0. */}
+            <Area dataKey="verified" stackId="k" type="monotone" fill={`url(#${fill})`} stroke="var(--color-verified)" strokeWidth={0} activeDot={false} />
+            {!single && (
+              <Area dataKey="pending" stackId="k" type="monotone" fill="var(--color-pending)" fillOpacity={0.35} stroke="var(--color-pending)" strokeWidth={2}
+                activeDot={{ r: 4.5, strokeWidth: 2, stroke: "var(--background)" }} dot={mark("var(--color-pending)", true, (p) => p.payload.pending > 0)} />
+            )}
+            {/* The verified line again, on top, so a fully verified month reads as verified; it carries the month dots. */}
+            <Area dataKey="verified" type="monotone" fill="none" stroke="var(--color-verified)" strokeWidth={2.25} legendType="none" tooltipType="none"
+              activeDot={{ r: 4.5, strokeWidth: 2, stroke: "var(--background)" }} dot={mark("var(--color-verified)", !!single, () => true)} />
+            {!single && <ChartLegend content={<ChartLegendContent />} />}
           </AreaChart>
         )}
       </ChartContainer>
@@ -453,85 +479,184 @@ export function AreaDonutCard({ data }: { data: Point[] }) {
   )
 }
 
-/** Everything the summary shows for one trade area (or all of them); plain data so the server page can pass it. */
+/** One breakdown column: the top named rows, then everything else (other names and blanks) as Other, adding up to the group's amount. */
+export type Breakdown = { top: Point[]; other: number; otherCount: number; missing: number; missingCount: number }
+
+/** Everything the summary shows for one group (or all of them); plain data so the server page can pass it. `missing` marks the "Not set" group. */
 export type AreaStat = {
-  name: string; href: string; vouchers: number; amount: number; verifiedCount: number; verifiedAmount: number
-  pendingCount: number; flagged: number; average: number; payees: Point[]; categories: Point[]; programs: Point[]
+  name: string; missing: boolean; href: string; reviewHref: string; fixHref: string
+  vouchers: number; amount: number; verifiedCount: number; verifiedAmount: number; pendingCount: number; flagged: number
+  payees: Breakdown; categories: Breakdown; programs: Breakdown
 }
 
-/** One trade area at a time: a soft dropdown picks it, the figures and breakdowns follow. */
-export function AreaSummary({ stats }: { stats: AreaStat[] }) {
-  const [name, setName] = useState(stats[0]?.name ?? "")
-  const a = stats.find((s) => s.name === name) ?? stats[0]
-  if (!a) return null
-  const pct = a.vouchers ? Math.round((100 * a.verifiedCount) / a.vouchers) : 0
-  const figures = [
-    ["Disbursed", peso(a.amount)],
-    ["Vouchers", a.vouchers.toLocaleString("en-US")],
-    ["Average voucher", peso(a.average)],
-    ["Needs fixing", a.flagged.toLocaleString("en-US")],
-  ]
+const SORTS = { amount: "Amount", review: "For review", name: "A–Z" } as const
+type Sort = keyof typeof SORTS
+const dvs = (n: number) => `${n.toLocaleString("en-US")} DV${n === 1 ? "" : "s"}`
+const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1)
+
+/** For review's mark: an outlined square in the review blue, so the state never rests on colour alone. */
+const ReviewMark = () => <span aria-hidden="true" className="size-2.5 shrink-0 rounded-[2px] border-2 border-review" />
+
+function BreakdownColumn({ title, data, things }: { title: string; data: Breakdown; things: string }) {
+  const sum = data.top.reduce((s, d) => s + d.value, 0) + data.other + data.missing
+  const rest = [data.otherCount && `${data.otherCount.toLocaleString("en-US")} ${things}`, data.missingCount && `${data.missingCount.toLocaleString("en-US")} blank`].filter(Boolean)
   return (
-    <div className="@container flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <DropdownMenu>
-          <DropdownMenuTrigger render={<Button variant="secondary" size="sm" className="max-w-full rounded-full" aria-label={`Trade area: ${a.name}`} />}>
-            <span className="truncate">{a.name}</span><ChevronDownIcon data-icon="inline-end" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="min-w-72">
-            <DropdownMenuGroup>
-              <DropdownMenuLabel>Trade area</DropdownMenuLabel>
-              {/* About five rows show at once; the rest scroll. */}
-              <div className="max-h-44 overflow-y-auto overscroll-contain">
-                {stats.map((s) => (
-                  <DropdownMenuItem key={s.name} className="gap-2 py-1.5" onClick={() => setName(s.name)}>
-                    <CheckIcon className={cn("text-primary", s.name !== a.name && "invisible")} />
-                    <span className={cn("min-w-0 flex-1 truncate", s.name === a.name && "font-medium")}>{s.name}</span>
-                    <span className="text-xs text-muted-foreground tabular-nums">{compact(s.amount)}</span>
-                  </DropdownMenuItem>
-                ))}
-              </div>
-            </DropdownMenuGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        {a.pendingCount > 0 && (
-          <Link href={a.href} className="ml-auto text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline print:hidden">
-            Open {a.pendingCount.toLocaleString("en-US")} pending
-          </Link>
+    <div className="flex flex-col gap-3">
+      <h4 className="text-sm font-medium">{title}</h4>
+      {data.top.length > 0 && <RankedBars caption={title} data={data.top} />}
+      {rest.length > 0 && (
+        <p className="flex items-baseline justify-between gap-3 text-sm text-muted-foreground">
+          <span>Other · {rest.join(", ")}</span><span className="tabular-nums">{peso(data.other + data.missing)}</span>
+        </p>
+      )}
+      <div className="flex flex-col gap-1 border-t-2 border-foreground pt-2 text-sm">
+        <p className="flex items-baseline justify-between gap-3 font-semibold"><span>Total</span><span className="tabular-nums">{peso(sum)}</span></p>
+      </div>
+    </div>
+  )
+}
+
+/** Every group in a ranked list (search, sort, arrow keys); the selected one's figures and breakdowns beside it. */
+export function AreaSummary({ stats, noun }: { stats: AreaStat[]; noun: string }) {
+  const router = useRouter()
+  const [all, ...groups] = stats
+  const unset = groups.find((s) => s.missing)
+  const [name, setName] = useState(all?.name ?? "")
+  const [query, setQuery] = useState("")
+  const [sort, setSort] = useState<Sort>("amount")
+  const search = useRef<HTMLInputElement>(null), list = useRef<HTMLDivElement>(null)
+  const id = useId()
+  // "/" jumps to the search box from anywhere on the page, unless you're already typing.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "/" || /^(INPUT|TEXTAREA|SELECT)$/.test((e.target as HTMLElement).tagName) || (e.target as HTMLElement).isContentEditable) return
+      e.preventDefault()
+      search.current?.focus()
+    }
+    addEventListener("keydown", onKey)
+    return () => removeEventListener("keydown", onKey)
+  }, [])
+  if (!all) return null
+  const q = query.trim().toLowerCase()
+  const named = groups.filter((s) => !s.missing && s.name.toLowerCase().includes(q))
+    .sort((x, y) => sort === "name" ? x.name.localeCompare(y.name) : sort === "review" ? y.pendingCount - x.pendingCount || y.amount - x.amount : y.amount - x.amount)
+  const shown = [all, ...named]
+  // A selection the search hides falls back to All, so the figures, Enter and the listbox's active row agree.
+  const a = shown.find((s) => s.name === name) ?? all
+  const largest = Math.max(1, ...groups.map((s) => s.amount))
+  const onListKey = (e: React.KeyboardEvent) => {
+    const i = shown.findIndex((s) => s.name === a.name)
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault()
+      setName(shown[Math.min(shown.length - 1, Math.max(0, i + (e.key === "ArrowDown" ? 1 : -1)))].name)
+    } else if (e.key === "Enter") router.push(a.href)
+    else if (e.key === "Escape") setName(all.name)
+  }
+  const verifiedShare = a.vouchers ? (100 * a.verifiedCount) / a.vouchers : 0
+
+  return (
+    <div className="@container">
+    <div className="grid gap-6 @4xl:grid-cols-[19rem_minmax(0,1fr)]">
+      <div className="flex min-w-0 flex-col gap-3 print:hidden">
+        <div className="relative">
+          <SearchIcon aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input ref={search} type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`Find a ${lower(noun)}`} aria-label={`Find a ${lower(noun)}`}
+            className="pr-9 pl-8" onKeyDown={(e) => {
+              if (e.key === "ArrowDown") { e.preventDefault(); list.current?.focus() }
+              if (e.key === "Escape") setQuery("")
+            }} />
+          <Kbd className="absolute top-1/2 right-2 -translate-y-1/2">/</Kbd>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-medium">{named.length.toLocaleString("en-US")} of {groups.filter((s) => !s.missing).length.toLocaleString("en-US")}</span>
+          <div role="group" aria-label="Sort" className="inline-flex rounded-lg bg-muted p-0.5">
+            {(Object.keys(SORTS) as Sort[]).map((k) => (
+              <button key={k} type="button" aria-pressed={k === sort} onClick={() => setSort(k)}
+                className={cn("rounded-md px-2 py-0.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring", k === sort ? "bg-background font-medium shadow-xs" : "text-muted-foreground hover:text-foreground")}>
+                {SORTS[k]}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div ref={list} role="listbox" tabIndex={0} aria-label={`${noun}s`} aria-activedescendant={`${id}-${shown.findIndex((s) => s.name === a.name)}`} onKeyDown={onListKey}
+          className="flex max-h-[34rem] flex-col gap-0.5 overflow-y-auto overscroll-contain rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          {shown.map((s, i) => (
+            <div key={s.name} id={`${id}-${i}`} role="option" aria-selected={s.name === a.name} title={`${s.name}: ${peso(s.amount)}`}
+              onClick={() => { setName(s.name); list.current?.focus() }}
+              className={cn("group flex cursor-pointer flex-col gap-1.5 rounded-lg px-3 py-2.5", s.name === a.name ? "bg-primary/10" : "hover:bg-muted", i === 0 && "mb-1")}>
+              <span className="flex items-baseline justify-between gap-3 text-sm">
+                <span className={cn("min-w-0 truncate", s.name === a.name ? "font-semibold" : "font-medium")}>{s.name}</span>
+                <span className="flex shrink-0 items-center gap-0.5 font-semibold tabular-nums">
+                  {compact(s.amount)}
+                  <ChevronRightIcon aria-hidden="true" className="size-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                </span>
+              </span>
+              <span className="flex items-center gap-2.5 text-xs text-muted-foreground">
+                <span aria-hidden="true" className="h-1 w-24 shrink-0 overflow-hidden rounded-full bg-muted">
+                  <span className="block h-full rounded-full bg-primary" style={{ width: `${i === 0 ? 100 : (100 * s.amount) / largest}%` }} />
+                </span>
+                <span className="tabular-nums">{dvs(s.vouchers)}</span>
+                {s.pendingCount
+                  ? <span className="ml-auto flex items-center gap-1.5 font-medium text-review-foreground"><ReviewMark />{s.pendingCount.toLocaleString("en-US")} for review</span>
+                  : <span className="ml-auto flex items-center gap-1"><CheckIcon className="size-3.5" />all verified</span>}
+              </span>
+            </div>
+          ))}
+          {named.length === 0 && <p className="px-3 py-4 text-sm text-muted-foreground">No {lower(noun)} matches “{query.trim()}”.</p>}
+        </div>
+        {unset && (
+          <p className="flex items-baseline justify-between gap-3 border-t border-dashed px-3 pt-3 text-xs text-muted-foreground">
+            <span>No {lower(noun)} · {dvs(unset.vouchers)} · {compact(unset.amount)}</span>
+            <Link href={unset.href} className="shrink-0 font-medium text-primary underline-offset-4 hover:underline">Fix {unset.vouchers.toLocaleString("en-US")}</Link>
+          </p>
         )}
       </div>
-      <dl className="grid grid-cols-2 gap-3 @3xl:grid-cols-4">
-        {figures.map(([k, v]) => (
-          <div key={k} className="flex flex-col gap-0.5 rounded-xl bg-muted/50 p-3">
-            <dt className="text-xs text-muted-foreground">{k}</dt>
-            <dd className="text-lg font-semibold tabular-nums">{v}</dd>
-          </div>
-        ))}
-      </dl>
-      <div className="flex flex-col gap-2">
-        <div className="flex items-baseline justify-between gap-3 text-sm">
-          <span className="font-medium">Verified</span>
-          <span className="text-muted-foreground tabular-nums">{a.verifiedCount.toLocaleString("en-US")} of {a.vouchers.toLocaleString("en-US")} · {pct}%</span>
+
+      <div className="@container/detail flex min-w-0 flex-col gap-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h3 className="text-base font-semibold">{a.name}</h3>
+          {a.flagged > 0
+            ? <Link href={a.fixHref} className="flex items-center gap-1.5 text-sm font-medium text-destructive underline-offset-4 hover:underline"><CircleAlertIcon className="size-4" />{a.flagged.toLocaleString("en-US")} need{a.flagged === 1 ? "s" : ""} fixing</Link>
+            : <span className="flex items-center gap-1.5 text-sm text-muted-foreground"><CheckIcon className="size-4" />No vouchers need fixing</span>}
         </div>
-        <div role="img" aria-label={`${pct}% verified`} className="flex h-2 w-full gap-0.5 overflow-hidden rounded-full bg-muted">
-          {pct > 0 && <span className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />}
+        <div className="grid gap-3 @xl/detail:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+          <div className="flex flex-col gap-1 rounded-xl bg-muted/50 p-4">
+            <span className="text-xs text-muted-foreground">Disbursed</span>
+            <span className="text-2xl font-semibold tracking-tight tabular-nums">{peso(a.amount)}</span>
+            <span className="text-xs text-muted-foreground tabular-nums">{a.vouchers.toLocaleString("en-US")} vouchers</span>
+          </div>
+          <div className="flex flex-col gap-2 rounded-xl bg-muted/50 p-4">
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              Review status
+              <Tooltip>
+                <TooltipTrigger render={<button type="button" aria-label="What verified means" className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring" />}>
+                  <InfoIcon className="size-3.5" />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-64">Verified: the Status column in the sheet says “Verified”. Every other voucher is for review.</TooltipContent>
+              </Tooltip>
+            </span>
+            <span className="flex flex-wrap items-baseline gap-x-2 text-lg font-semibold tabular-nums">
+              {a.verifiedCount.toLocaleString("en-US")} verified
+              {a.pendingCount > 0 && <span className="flex items-center gap-1.5 text-review-foreground"><ReviewMark />{a.pendingCount.toLocaleString("en-US")} for review</span>}
+              {a.pendingCount > 0 && <Link href={a.reviewHref} className="ml-auto text-sm font-medium text-primary underline-offset-4 hover:underline">Open {a.pendingCount.toLocaleString("en-US")}</Link>}
+            </span>
+            <div role="img" aria-label={`${a.verifiedCount} verified, ${a.pendingCount} for review`} className="flex h-2 w-full gap-0.5 overflow-hidden rounded-full bg-muted">
+              {a.verifiedCount > 0 && <span className="h-full rounded-full bg-primary" style={{ width: `${verifiedShare}%` }} />}
+              {a.pendingCount > 0 && <span className="h-full min-w-1 flex-1 rounded-full bg-review" />}
+            </div>
+            <span className="flex flex-wrap justify-between gap-x-3 text-xs text-muted-foreground tabular-nums">
+              <span>{peso(a.verifiedAmount)} verified</span>
+              {a.pendingCount > 0 && <span className="text-review-foreground">{peso(a.amount - a.verifiedAmount)} for review</span>}
+            </span>
+          </div>
         </div>
-        <p className="text-xs text-muted-foreground tabular-nums">{peso(a.verifiedAmount)} verified, {peso(a.amount - a.verifiedAmount)} for review</p>
+        <div className="grid gap-x-8 gap-y-6 border-t pt-4 @xl/detail:grid-cols-2 @3xl/detail:grid-cols-3">
+          <BreakdownColumn title="Top payees" data={a.payees} things="payees" />
+          <BreakdownColumn title="By category" data={a.categories} things="categories" />
+          <BreakdownColumn title="Programs" data={a.programs} things="programs" />
+        </div>
       </div>
-      <div className="grid gap-x-8 gap-y-5 border-t pt-4 @3xl:grid-cols-3">
-        {([["Top payees", a.payees], ["By category", a.categories]] as const).map(([title, data]) => data.length > 0 && (
-          <div key={title} className="flex flex-col gap-2">
-            <h3 className="text-sm font-medium">{title}</h3>
-            <RankedBars caption={`${title}, ${a.name}`} data={data} />
-          </div>
-        ))}
-        {a.programs.length > 0 && (
-          <div className="flex flex-col gap-2">
-            <h3 className="text-sm font-medium">Programs</h3>
-            <DonutChart caption={`Amount by program, ${a.name}`} data={a.programs} />
-          </div>
-        )}
-      </div>
+    </div>
     </div>
   )
 }

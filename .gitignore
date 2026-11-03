@@ -26,6 +26,7 @@
 *.pem
 service_account.json
 .impeccable/review/
+.impeccable/critique/
 
 # debug
 npm-debug.log*

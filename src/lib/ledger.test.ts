@@ -3,8 +3,10 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 
 import { blank, byIssue, DV_FORMAT, enrich, label, nextDvNo, filterRows, inTab, labelOf, median, monthsBack, paginate, parseAmount, parseDate, peso, qs, serialDate, sheetDate, total, yearThrough, type RawVoucher } from "./ledger.ts"
-import { collected, deposited, filterEntries, readCollections, undeposited } from "./collection.ts"
+import { collected, deposited, depositsByType, filterEntries, readCollections, undeposited } from "./collection.ts"
 import { classifyRow, colLetter, detectLayout, fixedLayout, HEADERS, inferType, layoutDiff, META, normalize, readSheet, savedFrom } from "./sheet-config.ts"
+import { documentXml, zip } from "./docx.ts"
+import { inflateRawSync } from "node:zlib"
 
 let n = 5
 const row = (dv_no: string, dv_date: string, amount = "1,000.50", check = "3477204", area = "ADMIN"): RawVoucher => ({
@@ -225,9 +227,25 @@ test("collection tab", () => {
   assert.deepEqual([collected(r.entries), deposited(r.entries), undeposited(r.entries)], [160000, 150000, 10000]) // agrees with row 2
   const dep = r.entries.find((e) => e.kind === "deposit")!
   assert.deepEqual([dep.sheet_row, dep.iso, dep.issues], [8, "2026-08-06", []])
+  assert.deepEqual(depositsByType(r.entries), [["Other", 150000]]) // deposits are totalled, not dropped like receipts-only groupBy
+  // Any other wording folds into Other, so the donut never has more slices than colours.
+  const kinds = ["LDDAP", "CASH DEPOSIT", "check deposit", "BANK TRANSFER", "ADJ"].map((payor, i) => ({ ...dep, payor, deposited: 100 * (i + 1) }))
+  assert.deepEqual(depositsByType(kinds), [["Other", 900], ["Check", 300], ["Cash", 200], ["LDDAP", 100]])
   assert.deepEqual(r.entries.find((e) => e.payor === "BEN")!.issues, ["duplicate_or", "no_area"])
   assert.equal(undeposited(r.entries, "2026-08-05"), 160000) // the deposit is dated 2026-08-06
   assert.deepEqual(filterEntries(r.entries, new URLSearchParams("issue=any")).map((e) => e.payor).sort(), ["BEN", "CY"])
   assert.deepEqual(filterEntries(r.entries, new URLSearchParams("area=DORM")).map((e) => e.payor), ["ANA"])
   assert.match(readCollections([["Date", "Payor"]]).error!, /no column for Collection, Deposit/)
+})
+
+test("docx", () => {
+  const xml = documentXml("T", "S", "Office", [{ title: "A", highlights: [], head: ["x"], width: [1], right: [false], rows: [["a & <b>"]], notes: [] }])
+  assert.match(xml, /a &amp; &lt;b&gt;/)
+  // Control characters pasted from the sheet are illegal in XML and would stop Word opening the file.
+  const pasted = documentXml("T", "S", "Office", [{ title: "A", highlights: [], head: ["x"], width: [1], right: [false], rows: [["tab\there\u000Bvt\u0001"]], notes: [] }])
+  assert.match(pasted, /tab\therevt</)
+  assert.doesNotMatch(pasted, /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/)
+  const z = zip([["word/document.xml", xml]]), size = z.readUInt32LE(18), name = z.readUInt16LE(26)
+  assert.equal(z.readUInt32LE(0), 0x04034b50)
+  assert.equal(inflateRawSync(z.subarray(30 + name, 30 + name + size)).toString(), xml) // the stored file comes back intact
 })

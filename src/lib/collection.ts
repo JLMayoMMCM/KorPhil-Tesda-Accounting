@@ -96,6 +96,16 @@ export function groupBy(es: Entry[], key: (e: Entry) => string): [string, number
   return [...out].map(([k, [n, a]]): [string, number, number] => [k, n, a]).sort((a, b) => b[2] - a[2])
 }
 
+/** How a deposit reached the bank, from the words the sheet uses for it (LDDAP, CASH DEPOSIT, CHECK DEPOSIT). */
+export const depositType = (payor: string) => /lddap/i.test(payor) ? "LDDAP" : /che(ck|que)/i.test(payor) ? "Check" : /cash/i.test(payor) ? "Cash" : "Other"
+
+/** [type, amount deposited] for the deposits among es, largest first. (groupBy totals receipts only.) */
+export function depositsByType(es: Entry[]): [string, number][] {
+  const out = new Map<string, number>()
+  for (const e of es) if (e.kind === "deposit") out.set(depositType(e.payor), (out.get(depositType(e.payor)) ?? 0) + e.deposited)
+  return [...out].sort((a, b) => b[1] - a[1])
+}
+
 export const entryMonths = (es: Entry[]) => [...new Set(es.map((e) => e.month))].sort().reverse()
 
 /** Distinct labels of a column over the collections, "Not set" last. */

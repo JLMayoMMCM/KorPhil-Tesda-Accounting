@@ -8,4 +8,4 @@
 
 **Brand commitments:** TESDA / KorPhil identity (seal logo). Since v2.0.0 (2026-09-29) typography and color come from the shadcn preset `b1YovW4Ey` (IBM Plex Sans, taupe neutrals, indigo primary); review flags read as outlined destructive badges. Layout follows the Figma board "ACCOUNTING-WORKSPACE › SAMPLE UI 2" (action-bar workspace).
 
-**Constraints:** Next.js App Router + shadcn/ui (Base UI), server-rendered with Server Actions. Only features the sheet can back are built (assumption, confirmed 2026-09-23): no activity feed, saved views, PDF/Excel generation, user roles.
+**Constraints:** Next.js App Router + shadcn/ui (Base UI), server-rendered with Server Actions. Only features the sheet can back are built (assumption, confirmed 2026-09-23): no activity feed, saved views, PDF/Excel generation, user roles. Exception (R7, 2026-11-03): reports also download as a Word .docx, built from the same schedules as the CSV; PDF stays the browser's Print.

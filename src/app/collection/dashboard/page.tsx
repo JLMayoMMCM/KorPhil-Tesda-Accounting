@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
-import { account, collected, collections, deposited, ENTRY_ISSUES, entryMonths, groupBy, tag, undeposited, type EntryIssue } from "@/lib/collection"
+import { account, collected, collections, deposited, depositsByType, depositType, ENTRY_ISSUES, entryMonths, groupBy, tag, undeposited, type EntryIssue } from "@/lib/collection"
 import { getCollectionData } from "@/lib/data"
 import { longDate, longMonth, monthLabel, monthsBack, peso, qs } from "@/lib/ledger"
 import { cn } from "@/lib/utils"
@@ -21,6 +21,8 @@ const PANEL = "rounded-2xl ring-0 border shadow-xs"
 const RAMP = ["var(--chart-5)", "var(--chart-3)", "var(--chart-1)", "var(--chart-4)", "var(--chart-2)", "var(--muted-foreground)"]
 const MONTH_NUMBERS = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"]
 const receipts = (n: number) => `${n.toLocaleString("en-US")} receipt${n === 1 ? "" : "s"}`
+/** Whole percent of a total, but never rounds a small share down to 0. */
+const share = (n: number, of: number) => { const p = of ? (100 * n) / of : 0; return `${p > 0 && p < 1 ? "<1" : Math.round(p)}%` }
 const change = (now: number, before: number, against: string) => {
   if (!before) return null
   const p = Math.round((100 * (now - before)) / before)
@@ -117,16 +119,14 @@ export default async function CollectionDashboard({ searchParams }: PageProps<"/
   const from = year === "all" ? `${oldest}-01` : `${year}-01-01`
   const to = year === "all" ? new Date(Date.parse(`${monthsBack(newest, -1)}-01`) - 864e5).toISOString().slice(0, 10) : `${year}-12-31`
 
+  // UACS as ranked bars: one account can be most of the money, and slivers of a pie can't be read.
   const uacs = groupBy(rows, (e) => tag(e, "uacs"))
-  const slices = uacs.length > 6 ? [...uacs.slice(0, 5), ["All others", 0, uacs.slice(5).reduce((s, u) => s + u[2], 0)] as [string, number, number]] : uacs
-  const uacsData: Point[] = slices.map(([name, , amt], i) => ({
-    label: name === "All others" ? `All others (${uacs.length - 5})` : account(name), tip: name, value: amt, color: RAMP[i],
-    href: name === "All others" ? undefined : link({ uacs: name }),
-  }))
+  const uacsData: Point[] = uacs.map(([name, , amt]) => ({ label: `${account(name)} · ${share(amt, sum)}`, tip: name, value: amt, href: link({ uacs: name }) }))
   const areaData: Point[] = groupBy(rows, (e) => tag(e, "area")).slice(0, 8).map(([name, n, amt]) => ({ label: name, tip: `${name} · ${receipts(n)}`, value: amt, href: link({ area: name }) }))
   const flagged = cs.filter((e) => e.issues.length)
-  const issues = (Object.keys(ENTRY_ISSUES) as EntryIssue[]).map((i) => [i, cs.filter((e) => e.issues.includes(i))] as const).filter(([, l]) => l.length)
-  const deposits = rows.filter((e) => e.kind === "deposit").slice(0, 6)
+  const checks = (Object.keys(ENTRY_ISSUES) as EntryIssue[]).map((i) => [i, cs.filter((e) => e.issues.includes(i))] as const)
+  const allDeposits = rows.filter((e) => e.kind === "deposit"), deposits = allDeposits.slice(0, 3)
+  const depositData: Point[] = depositsByType(rows).map(([label, value], i) => ({ label, value, color: RAMP[i] }))
 
   return (
     <div className="@container/main flex w-full flex-col gap-4">
@@ -156,7 +156,10 @@ export default async function CollectionDashboard({ searchParams }: PageProps<"/
           <TrendChart key={year} days={[...byDay.values()]} from={from} to={to} single="Collected" />
         </Panel>
         <Panel title="By UACS code" description={`${uacs.length} account${uacs.length === 1 ? "" : "s"} · share of the amount collected`} className="@5xl/main:col-span-5">
-          <DonutChart caption="Collections by UACS code" data={uacsData} />
+          <RankedBars caption="Collections by UACS code" data={uacsData} />
+          <p className="mt-3 flex items-baseline justify-between gap-3 border-t-2 border-foreground pt-2 text-sm font-semibold">
+            <span>Total</span><span className="tabular-nums">{peso(sum)}</span>
+          </p>
         </Panel>
       </div>
 
@@ -164,34 +167,45 @@ export default async function CollectionDashboard({ searchParams }: PageProps<"/
         <Panel title="By area" description="The largest areas by amount collected" href={link({})} className="@5xl/main:col-span-5">
           <RankedBars caption="Collections by area" data={areaData} />
         </Panel>
-        <Panel title="Deposits" description={`Latest deposits, ${scope}`} href={link({ kind: "deposit" })} action="All deposits" className="@5xl/main:col-span-4">
+        <Panel title="Deposits" description={`How the money reached the bank, ${scope}`} href={link({ kind: "deposit" })} action="All deposits" className="@5xl/main:col-span-4">
           {deposits.length ? (
-            <ul className="flex flex-col divide-y text-sm">
+            <div className="flex flex-col gap-4">
+            <DonutChart caption="Deposits by type" data={depositData} center={{ label: allDeposits.length === 1 ? "deposit" : "deposits", value: allDeposits.length.toLocaleString("en-US") }} />
+            <h3 className="border-t pt-3 text-xs font-medium text-muted-foreground">Latest</h3>
+            <ul className="-mt-2 flex flex-col divide-y text-sm">
               {deposits.map((e) => (
                 <li key={e.sheet_row} className="flex items-baseline justify-between gap-3 py-2">
                   <span className="flex flex-col">
                     <span>{longDate(e.iso)}</span>
-                    <span className="text-xs text-muted-foreground">Row {e.sheet_row}{e.payor ? ` · ${e.payor}` : ""}</span>
+                    <span className="text-xs text-muted-foreground">{depositType(e.payor)} · row {e.sheet_row}</span>
                   </span>
                   <span className="font-medium tabular-nums">{peso(e.deposited)}</span>
                 </li>
               ))}
             </ul>
+            </div>
           ) : <p className="text-sm text-muted-foreground">No deposits dated {scope}.</p>}
         </Panel>
-        <Panel title="Exceptions" description={`${receipts(flagged.length)} need a look · ${peso(collected(flagged))}`} className="@5xl/main:col-span-3">
-          {issues.length ? (
-            <ul className="flex flex-col gap-2 text-sm">
-              {issues.map(([i, list]) => (
-                <li key={i}>
-                  <Link href={link({ issue: i })} className="flex items-center justify-between gap-2 rounded-md hover:text-primary">
-                    <span>{ENTRY_ISSUES[i]}</span>
+        {/* Same name as the Collections tab; every check is listed, with a tick where nothing is wrong. */}
+        <Panel title="Needs review" description={flagged.length ? `${receipts(flagged.length)} · ${peso(collected(flagged))}` : "Every receipt passes the checks"}
+          href={flagged.length ? link({ issue: "any" }) : undefined} action={`Open ${flagged.length.toLocaleString("en-US")}`} className="@5xl/main:col-span-3">
+          <ul className="flex flex-col divide-y text-sm">
+            {checks.map(([i, list]) => (
+              <li key={i}>
+                {list.length ? (
+                  <Link href={link({ issue: i })} className="flex items-center gap-2 py-2 hover:text-primary">
+                    <span className="flex-1">{ENTRY_ISSUES[i]}</span>
                     <Badge variant="destructive" className="tabular-nums">{list.length}</Badge>
+                    <span className="font-medium tabular-nums">{peso(collected(list))}</span>
                   </Link>
-                </li>
-              ))}
-            </ul>
-          ) : <p className="text-sm text-muted-foreground">Every receipt has an OR #, a UACS code and an area.</p>}
+                ) : (
+                  <span className="flex items-center gap-2 py-2 text-muted-foreground">
+                    <span className="flex-1">{ENTRY_ISSUES[i]}</span>none<CheckIcon aria-hidden="true" className="size-3.5" />
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
         </Panel>
       </div>
     </div>

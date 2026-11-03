@@ -1,6 +1,6 @@
 "use client"
 
-import { CircleAlertIcon, XIcon } from "lucide-react"
+import { CheckIcon, CircleAlertIcon, XIcon } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import * as React from "react"
@@ -17,6 +17,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
 import { FOR_REVIEW, VERIFIED } from "@/lib/ledger"
+import { cn } from "@/lib/utils"
 import type { Column } from "@/lib/sheet-config"
 
 type Props = {
@@ -30,6 +31,25 @@ type Props = {
 }
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/
+
+/** Status wears its state, as on the Dashboard: indigo with a tick when Verified, the blue outlined square when For review. */
+function StatusSelect(props: React.ComponentProps<typeof NativeSelect>) {
+  const [value, setValue] = React.useState(String(props.defaultValue ?? ""))
+  const verified = value.trim().toLowerCase() === VERIFIED.toLowerCase()
+  return (
+    <div className="relative">
+      <NativeSelect {...props} onChange={(e) => setValue(e.target.value)}
+        className={cn("w-full [&_select]:pl-8 [&_select]:font-medium",
+          verified ? "[&_select]:border-primary [&_select]:bg-primary/10 [&_select]:text-primary [&_svg]:text-primary" : "[&_select]:border-review [&_select]:bg-review/10")}>
+        <NativeSelectOption value={FOR_REVIEW}>{FOR_REVIEW}</NativeSelectOption>
+        <NativeSelectOption value={VERIFIED}>{VERIFIED}</NativeSelectOption>
+      </NativeSelect>
+      {verified
+        ? <CheckIcon aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-primary" />
+        : <span aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-2.5 -translate-y-1/2 rounded-[2px] border-2 border-review" />}
+    </div>
+  )
+}
 
 export function VoucherPanel({ row, initial, columns, heading, status, source, closeUrl }: Props) {
   const router = useRouter()
@@ -62,12 +82,7 @@ export function VoucherPanel({ row, initial, columns, heading, status, source, c
   const input = (c: Column) => {
     const value = initial[c.key] ?? ""
     const common = { id: c.key, name: c.key, defaultValue: value, disabled: c.visibility === "readonly" }
-    if (c.field === "status") return (
-      <NativeSelect {...common} className="w-full">
-        <NativeSelectOption value={FOR_REVIEW}>{FOR_REVIEW}</NativeSelectOption>
-        <NativeSelectOption value={VERIFIED}>{VERIFIED}</NativeSelectOption>
-      </NativeSelect>
-    )
+    if (c.field === "status") return <StatusSelect {...common} />
     if (c.type === "dropdown") {
       // A value already in the row stays selectable even if the list dropped it.
       const choices = c.options.includes(value) || !value ? c.options : [value, ...c.options]
