@@ -61,6 +61,7 @@ export type Spec<F extends string> = { headers: Record<F, string[]>; required: F
 export const DISBURSEMENT: Spec<Field> = { headers: HEADERS, required: REQUIRED }
 
 // The Collection tab: the ledger is A:I with headers in row 1; J onward holds hand-made summary tables, never read.
+// Deposit is read only to recognise deposit rows and leave them out; Undeposited Collection is never read.
 export const COLLECTION_HEADERS = {
   date: ["Date", "Collection date", "Date of collection"],
   or_no: ["Reference No./OR No.", "OR No", "OR #", "Reference No", "Official Receipt No"],
@@ -72,7 +73,7 @@ export const COLLECTION_HEADERS = {
   deposit: ["Deposit", "Deposits", "Amount deposited"],
 }
 export type CollectionField = keyof typeof COLLECTION_HEADERS
-export const COLLECTION: Spec<CollectionField> = { headers: COLLECTION_HEADERS, required: ["date", "collection", "deposit"], lastCol: 8 }
+export const COLLECTION: Spec<CollectionField> = { headers: COLLECTION_HEADERS, required: ["date", "collection"], lastCol: 8 }
 
 /** "DV No." / "DV #" / "dv number" -> "dv no". */
 export function normalize(text: Cell | undefined): string {

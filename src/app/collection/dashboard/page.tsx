@@ -3,22 +3,21 @@ import type { Metadata } from "next"
 import Link from "next/link"
 
 import { compact } from "@/components/charts"
-import { DonutChart, RankedBars, TrendChart, type Day, type Point } from "@/components/dashboard-charts"
+import { RankedBars, TrendChart, type Day, type Point } from "@/components/dashboard-charts"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
-import { account, collected, collections, deposited, depositsByType, depositType, ENTRY_ISSUES, entryMonths, groupBy, tag, undeposited, type EntryIssue } from "@/lib/collection"
+import { account, collected, ENTRY_ISSUES, entryMonths, groupBy, tag, type EntryIssue } from "@/lib/collection"
 import { getCollectionData } from "@/lib/data"
-import { longDate, longMonth, monthLabel, monthsBack, peso, qs } from "@/lib/ledger"
+import { longMonth, monthLabel, monthsBack, peso, qs } from "@/lib/ledger"
 import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = { title: "Dashboard · Collections" }
 
-// Same soft panels and slice ramp as the voucher dashboard.
+// Same soft panels as the voucher dashboard.
 const PANEL = "rounded-2xl ring-0 border shadow-xs"
-const RAMP = ["var(--chart-5)", "var(--chart-3)", "var(--chart-1)", "var(--chart-4)", "var(--chart-2)", "var(--muted-foreground)"]
 const MONTH_NUMBERS = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"]
 const receipts = (n: number) => `${n.toLocaleString("en-US")} receipt${n === 1 ? "" : "s"}`
 /** Whole percent of a total, but never rounds a small share down to 0. */
@@ -29,7 +28,7 @@ const change = (now: number, before: number, against: string) => {
   return p ? `${p > 0 ? "up" : "down"} ${Math.abs(p).toLocaleString("en-US")}% on ${against}` : `the same as ${against}`
 }
 
-/** The collection overview: what came in, what went to the bank, what is still on hand, and where it came from. */
+/** The collection overview: what came in, how it compares, and where it came from. */
 export default async function CollectionDashboard({ searchParams }: PageProps<"/collection/dashboard">) {
   const { entries, error, today } = await getCollectionData()
   const years = [...new Set([today.slice(0, 4), ...entryMonths(entries).map((m) => m.slice(0, 4))])].sort().reverse()
@@ -94,7 +93,7 @@ export default async function CollectionDashboard({ searchParams }: PageProps<"/
     )
   }
 
-  const cs = collections(rows), sum = collected(rows), banked = deposited(rows)
+  const sum = collected(rows)
   const now = collected(entries.filter((e) => e.month === thisMonth)), before = collected(entries.filter((e) => e.month === lastMonth))
   const lastName = longMonth(lastMonth + "-01"), monthName = `${longMonth(thisMonth + "-01")} ${thisMonth.slice(0, 4)}`
   const delta = before ? Math.round((100 * (now - before)) / before) : null
@@ -103,12 +102,9 @@ export default async function CollectionDashboard({ searchParams }: PageProps<"/
   const y = Number(year), through = year === today.slice(0, 4) ? today.slice(5, 7) : "12"
   const ytd = (yr: number) => collected(entries.filter((e) => e.month >= `${yr}-01` && e.month <= `${yr}-${through}`))
   const yearChange = year === "all" ? null : change(ytd(y), ytd(y - 1), through === "12" ? String(y - 1) : `Jan–${monthLabel(`${y}-${through}`).slice(0, 3)} ${y - 1}`)
-  // Cash on hand: everything collected less everything deposited, as of today or the year's last day.
-  const asOf = year === "all" || `${year}-12-31` > today ? today : `${year}-12-31`
-  const onHand = undeposited(entries, asOf)
 
   const byDay = new Map<string, Day>()
-  for (const e of cs) {
+  for (const e of rows) {
     const d = byDay.get(e.iso) ?? { date: e.iso, value: 0, verified: 0 }
     d.value += e.collected
     d.verified += e.collected
@@ -123,16 +119,14 @@ export default async function CollectionDashboard({ searchParams }: PageProps<"/
   const uacs = groupBy(rows, (e) => tag(e, "uacs"))
   const uacsData: Point[] = uacs.map(([name, , amt]) => ({ label: `${account(name)} · ${share(amt, sum)}`, tip: name, value: amt, href: link({ uacs: name }) }))
   const areaData: Point[] = groupBy(rows, (e) => tag(e, "area")).slice(0, 8).map(([name, n, amt]) => ({ label: name, tip: `${name} · ${receipts(n)}`, value: amt, href: link({ area: name }) }))
-  const flagged = cs.filter((e) => e.issues.length)
-  const checks = (Object.keys(ENTRY_ISSUES) as EntryIssue[]).map((i) => [i, cs.filter((e) => e.issues.includes(i))] as const)
-  const allDeposits = rows.filter((e) => e.kind === "deposit"), deposits = allDeposits.slice(0, 3)
-  const depositData: Point[] = depositsByType(rows).map(([label, value], i) => ({ label, value, color: RAMP[i] }))
+  const flagged = rows.filter((e) => e.issues.length)
+  const checks = (Object.keys(ENTRY_ISSUES) as EntryIssue[]).map((i) => [i, rows.filter((e) => e.issues.includes(i))] as const)
 
   return (
     <div className="@container/main flex w-full flex-col gap-4">
       {switcher}
-      <dl aria-label="Key figures" className="grid gap-4 @3xl/main:grid-cols-2 @6xl/main:grid-cols-4">
-        <Figure label={`Collected, ${scope}`} value={peso(sum)} note={yearChange ?? receipts(cs.length)} />
+      <dl aria-label="Key figures" className="grid gap-4 @3xl/main:grid-cols-2">
+        <Figure label={`Collected, ${scope}`} value={peso(sum)} note={yearChange ?? receipts(rows.length)} />
         <div className={cn(PANEL, "flex flex-col gap-1 bg-card px-5 py-4")}>
           <dt className="text-sm text-muted-foreground">{monthName}</dt>
           <dd className="flex flex-wrap items-baseline gap-x-2.5">
@@ -147,8 +141,6 @@ export default async function CollectionDashboard({ searchParams }: PageProps<"/
           </dd>
           <dd className="text-sm text-muted-foreground">{lastName}: <b className="font-semibold text-foreground tabular-nums">{peso(before)}</b></dd>
         </div>
-        <Figure label={`Deposited, ${scope}`} value={peso(banked)} note={`${(rows.length - cs.length).toLocaleString("en-US")} deposits`} />
-        <Figure label="Undeposited collections" value={peso(onHand)} note={`as of ${longDate(asOf)}`} warn={onHand < 0} />
       </dl>
 
       <div className="grid gap-4 @5xl/main:grid-cols-12">
@@ -164,31 +156,12 @@ export default async function CollectionDashboard({ searchParams }: PageProps<"/
       </div>
 
       <div className="grid gap-4 @5xl/main:grid-cols-12">
-        <Panel title="By area" description="The largest areas by amount collected" href={link({})} className="@5xl/main:col-span-5">
+        <Panel title="By area" description="The largest areas by amount collected" href={link({})} className="@5xl/main:col-span-7">
           <RankedBars caption="Collections by area" data={areaData} />
-        </Panel>
-        <Panel title="Deposits" description={`How the money reached the bank, ${scope}`} href={link({ kind: "deposit" })} action="All deposits" className="@5xl/main:col-span-4">
-          {deposits.length ? (
-            <div className="flex flex-col gap-4">
-            <DonutChart caption="Deposits by type" data={depositData} center={{ label: allDeposits.length === 1 ? "deposit" : "deposits", value: allDeposits.length.toLocaleString("en-US") }} />
-            <h3 className="border-t pt-3 text-xs font-medium text-muted-foreground">Latest</h3>
-            <ul className="-mt-2 flex flex-col divide-y text-sm">
-              {deposits.map((e) => (
-                <li key={e.sheet_row} className="flex items-baseline justify-between gap-3 py-2">
-                  <span className="flex flex-col">
-                    <span>{longDate(e.iso)}</span>
-                    <span className="text-xs text-muted-foreground">{depositType(e.payor)} · row {e.sheet_row}</span>
-                  </span>
-                  <span className="font-medium tabular-nums">{peso(e.deposited)}</span>
-                </li>
-              ))}
-            </ul>
-            </div>
-          ) : <p className="text-sm text-muted-foreground">No deposits dated {scope}.</p>}
         </Panel>
         {/* Same name as the Collections tab; every check is listed, with a tick where nothing is wrong. */}
         <Panel title="Needs review" description={flagged.length ? `${receipts(flagged.length)} · ${peso(collected(flagged))}` : "Every receipt passes the checks"}
-          href={flagged.length ? link({ issue: "any" }) : undefined} action={`Open ${flagged.length.toLocaleString("en-US")}`} className="@5xl/main:col-span-3">
+          href={flagged.length ? link({ issue: "any" }) : undefined} action={`Open ${flagged.length.toLocaleString("en-US")}`} className="@5xl/main:col-span-5">
           <ul className="flex flex-col divide-y text-sm">
             {checks.map(([i, list]) => (
               <li key={i}>
@@ -212,12 +185,12 @@ export default async function CollectionDashboard({ searchParams }: PageProps<"/
   )
 }
 
-function Figure({ label, value, note, warn = false }: { label: string; value: string; note: string; warn?: boolean }) {
+function Figure({ label, value, note }: { label: string; value: string; note: string }) {
   const tone = note.startsWith("up ") ? "bg-primary/10 text-primary" : note.startsWith("down ") ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"
   return (
     <div className={cn(PANEL, "flex flex-col gap-1 bg-card px-5 py-4")}>
       <dt className="text-sm text-muted-foreground">{label}</dt>
-      <dd className={cn("text-3xl font-semibold tracking-tight tabular-nums", warn && "text-destructive")}>{value}</dd>
+      <dd className="text-3xl font-semibold tracking-tight tabular-nums">{value}</dd>
       <dd><span className={cn("inline-block rounded-full px-2.5 py-0.5 text-xs tabular-nums", tone)}>{note}</span></dd>
     </div>
   )

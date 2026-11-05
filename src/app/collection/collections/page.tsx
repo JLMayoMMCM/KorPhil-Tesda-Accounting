@@ -11,22 +11,22 @@ import { Input } from "@/components/ui/input"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { account, collected, deposited, ENTRY_ISSUES, entryMonths, filterEntries, tags, type EntryIssue } from "@/lib/collection"
+import { account, collected, ENTRY_ISSUES, entryMonths, filterEntries, tags, type EntryIssue } from "@/lib/collection"
 import { getCollectionData } from "@/lib/data"
 import { longDate, monthLabel, peso, qs, toParams } from "@/lib/ledger"
 
 export const metadata: Metadata = { title: "Collections · Collections" }
 
-const VIEWS = { "": "All", collection: "Receipts", deposit: "Deposits", review: "Needs review" } as const
+const VIEWS = { "": "All", review: "Needs review" } as const
 const PER = 100
 const BASE = "/collection/collections/"
 
-/** Every receipt and deposit on the Collection tab, newest first, with the same filters the dashboard links to. */
+/** Every receipt on the Collection tab, newest first, with the same filters the dashboard links to. */
 export default async function Collections({ searchParams }: PageProps<"/collection/collections">) {
   const params = toParams(await searchParams)
   const { entries } = await getCollectionData()
-  // "Needs review" is a view, not a kind: receipts with any flag.
-  const view = params.get("issue") === "any" ? "review" : (params.get("kind") ?? "")
+  // "Needs review": receipts with any flag.
+  const view = params.get("issue") === "any" ? "review" : ""
   const shown = filterEntries(entries, params)
   const pages = Math.max(1, Math.ceil(shown.length / PER))
   const page = Math.min(pages, Math.max(1, Math.floor(Number(params.get("page"))) || 1))
@@ -48,7 +48,7 @@ export default async function Collections({ searchParams }: PageProps<"/collecti
     <section className="flex min-w-0 flex-col gap-3">
       <nav aria-label="Collection views" className="flex flex-wrap items-center gap-1 border-b pb-2">
         {(Object.entries(VIEWS) as [keyof typeof VIEWS, string][]).map(([key, name]) => {
-          const changes = key === "review" ? { kind: null, issue: "any" } : { kind: key || null, issue: view === "review" ? null : issue }
+          const changes = key === "review" ? { issue: "any" } : { issue: view === "review" ? null : issue }
           return (
             <Button key={key} size="sm" variant={key === view ? "secondary" : "ghost"} aria-current={key === view ? "page" : undefined}
               render={<Link href={BASE + qs(params, { ...changes, page: null })} />} nativeButton={false}>
@@ -103,7 +103,7 @@ export default async function Collections({ searchParams }: PageProps<"/collecti
           </Badge>
         ))}
         <span className="ml-auto font-medium tabular-nums">
-          {shown.length} shown · {peso(collected(shown))} collected{deposited(shown) ? ` · ${peso(deposited(shown))} deposited` : ""}
+          {shown.length} shown · {peso(collected(shown))} collected
         </span>
       </div>
 
@@ -116,7 +116,6 @@ export default async function Collections({ searchParams }: PageProps<"/collecti
                 <TableHead className="w-full">Payor · nature</TableHead>
                 <TableHead className="hidden md:table-cell">UACS · area</TableHead>
                 <TableHead className="text-right">Collection</TableHead>
-                <TableHead className="text-right">Deposit</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -124,7 +123,7 @@ export default async function Collections({ searchParams }: PageProps<"/collecti
                 <TableRow key={e.sheet_row}>
                   <TableCell className="align-top whitespace-nowrap">
                     <div>{longDate(e.iso)}</div>
-                    <div className="text-xs text-muted-foreground tabular-nums">{e.kind === "deposit" ? "Deposit" : e.or_no || "No OR #"} · row {e.sheet_row}</div>
+                    <div className="text-xs text-muted-foreground tabular-nums">{e.or_no || "No OR #"} · row {e.sheet_row}</div>
                   </TableCell>
                   <TableCell className="align-top whitespace-normal">
                     <div className="font-medium">{e.payor || "—"}</div>
@@ -140,17 +139,15 @@ export default async function Collections({ searchParams }: PageProps<"/collecti
                     {/^\s*\d{6,}/.test(e.uacs) && <div className="text-xs text-muted-foreground">{account(e.uacs)}</div>}
                     <div className="text-xs text-muted-foreground">{e.area}</div>
                   </TableCell>
-                  <TableCell className="text-right align-top tabular-nums">{e.collected ? peso(e.collected) : ""}</TableCell>
-                  <TableCell className="text-right align-top tabular-nums">{e.deposited ? peso(e.deposited) : ""}</TableCell>
+                  <TableCell className="text-right align-top tabular-nums">{peso(e.collected)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
             <TableFooter>
               <TableRow>
-                <TableCell colSpan={2} className="font-medium">Total, {shown.length} entries</TableCell>
+                <TableCell colSpan={2} className="font-medium">Total, {shown.length} receipts</TableCell>
                 <TableCell className="hidden md:table-cell" />
                 <TableCell className="text-right font-medium tabular-nums">{peso(collected(shown))}</TableCell>
-                <TableCell className="text-right font-medium tabular-nums">{peso(deposited(shown))}</TableCell>
               </TableRow>
             </TableFooter>
           </Table>
