@@ -48,6 +48,10 @@ export type Period = keyof typeof PERIODS
 /** The period in scope: inclusive "YYYY-MM" bounds ("" for all dates), its heading, and the period before it. */
 export type Scope = { by: Period; from: string; to: string; label: string; prior: { from: string; to: string; label: string } | null }
 
+/** A report's file name, without extension: its kind and period. */
+export const reportFile = (kind: string, { from, to }: Pick<Scope, "from" | "to">) =>
+  `${kind.replace(/^x:/, "").replace(/[^\w-]+/g, "_")}-${from ? (from === to ? from : `${from}_${to}`) : "all"}`
+
 /** "2026-09" -> "September 30, 2026" (last day of the month). */
 const monthEnd = (m: string) => {
   const [y, mo] = m.split("-").map(Number)

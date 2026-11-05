@@ -25,7 +25,7 @@ Create `.env.local` in the repo root:
 |---|---|
 | `GOOGLE_SHEET_ID` | required |
 | `GOOGLE_SHEET_RANGE` | tab name, default `EXP` (the app reads columns A:L from row 5) |
-| `SHEET_LAYOUT` | `detected` reads and writes through the layout found in the sheet (Settings → Layout settings, then auto-detection); anything else, the default, keeps the fixed A:L layout. Also the rollback switch |
+| `SHEET_LAYOUT` | optional: by default reads and writes go through the layout found in the sheet (Settings → Layout settings, then auto-detection), so the form follows its columns. `fixed` keeps the fixed A:L layout: the rollback switch |
 | `SHEET_HEADER_ROW`, `SHEET_FIRST_ROW` | optional: pin the header row and first data row for layout detection (empty = auto-detect) |
 | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | OAuth "Web application" client |
 | `SESSION_SECRET` | 32 random bytes, base64url: `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"` |
@@ -42,7 +42,7 @@ Everyone signs in with their own Google account, and that account reads and writ
 
 ## Saving to the sheet
 
-- The edit panel is built from the sheet's columns (labels, dropdowns from the Selection List by header, dates, amounts). It writes only the cells that changed, after re-reading the header row and checking the row still holds the same DV #; spacer columns are never written. DV #, check # and payee are written as plain text. **New DV** goes into the first empty row after the last voucher (`SHEET_LAYOUT=detected`) or is appended (fixed).
+- The edit panel is built from the sheet's columns (labels, dropdowns from the Selection List by header, dates, amounts). It writes only the cells that changed, after re-reading the header row and checking the row still holds the same DV #; spacer columns are never written. DV #, check # and payee are written as plain text. **New DV** opens with today's date and the next DV # (which follows the date until you type your own; if the number is taken by the time you save, the next free one is used and the toast says so). It goes into the first empty row after the last voucher (or is appended with `SHEET_LAYOUT=fixed`). Status is a dropdown from the Selection List's STATUS column; a voucher counts as verified when it reads "Verified" in any capitalization.
 - Every written cell is logged on the server as `[sheet write]` (range, old value, new value, user).
 - **Settings → Sheet layout** shows how the app reads the sheet and which rows it skips; **Layout settings** lets Editors pick the header row, rows to ignore and each column's role, input and visibility. Those settings are saved in the spreadsheet as hidden developer metadata (only this app's Google Cloud project sees them).
 - A dropdown column added in the sheet (with a matching Selection List column) gets its own report section, CSV section and dashboard grouping.
@@ -53,7 +53,7 @@ Everyone signs in with their own Google account, and that account reads and writ
 ## Structure
 
 - `src/lib/ledger.ts`: pure rules: review checks (no/duplicate DV #, no date, no amount, no check #, no trade area), totals, filters, money (integer centavos). Self-check: `npm test`.
-- `src/lib/sheets.ts`: Google Sheets read/write (pulls cached 60 s per server instance and sheet).
+- `src/lib/sheets.ts`: Google Sheets read/write (pulls cached 60 s per server instance and sheet; an older cache is served at once and refreshed behind it, a write or Sync waits for a fresh pull). Open pages refresh themselves every minute, unless a form has unsaved edits.
 - `src/lib/sheet-config.ts`: the sheet layout: fixed columns, accepted header text, header-row detection and the row classifier.
 - `src/lib/session.ts`, `src/proxy.ts`, `src/app/login/`, `src/app/auth/callback/`: Google sign-in; the session is an encrypted cookie, refreshed in the proxy.
 - `src/app/actions.ts`: Server Actions (save, sync, sign out).

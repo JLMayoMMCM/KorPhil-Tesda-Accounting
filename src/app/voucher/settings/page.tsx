@@ -157,7 +157,7 @@ function SheetLayout({ model, candidate }: { model: SheetModel; candidate: Sheet
                   {c.field && REQUIRED.includes(c.field) && <span className="text-muted-foreground"> · required</span>}
                   {c.field && candidate.layout.duplicates.includes(c.field) && <span className="text-destructive"> · header found twice (first used)</span>}
                 </TableCell>
-                <TableCell>{INPUT_TYPES[c.type]}{c.type === "dropdown" && c.field !== "status" && <span className="text-muted-foreground"> · {c.options.length} choices</span>}</TableCell>
+                <TableCell>{INPUT_TYPES[c.type]}{c.type === "dropdown" && <span className="text-muted-foreground"> · {c.options.length} choices</span>}</TableCell>
                 <TableCell>{VISIBILITY[c.visibility]}</TableCell>
               </TableRow>
             ))}

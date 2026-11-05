@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import { VoucherPanel } from "@/components/voucher-panel"
 import { clock, getData } from "@/lib/data"
 import {
-  filterRows, FOR_REVIEW, inTab, isVerified, ISSUES, monthLabel, VERIFIED, months, parseDate, peso, qs, longDate, TABS, toParams, total,
+  filterRows, FOR_REVIEW, inTab, isVerified, ISSUES, monthLabel, nextDvNo, VERIFIED, months, parseDate, peso, qs, longDate, sameChoice, TABS, toParams, total,
   values, type Issue, type Tab, type Voucher,
 } from "@/lib/ledger"
 import type { Column } from "@/lib/sheet-config"
@@ -24,11 +24,11 @@ import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = { title: "Vouchers" }
 
-/** Panel form values by column key: sheet values, with parseable dates as ISO for the date pickers. */
+/** Panel form values by column key: sheet values, with parseable dates as ISO for the date pickers and dropdowns in their list's spelling. A new voucher starts For Review. */
 function formFromRow(r: Voucher | null, columns: Column[]): Record<string, string> {
   return Object.fromEntries(columns.map((c) => {
-    const v = !r ? "" : c.field ? r[c.field] : r.extra?.[c.key] ?? ""
-    if (c.field === "status") return [c.key, r && isVerified(r) ? VERIFIED : FOR_REVIEW]
+    const v = !r ? (c.field === "status" ? FOR_REVIEW : "") : c.field ? r[c.field] : r.extra?.[c.key] ?? ""
+    if (c.type === "dropdown") return [c.key, c.options.find((o) => sameChoice(o, v)) ?? v]
     return [c.key, c.type === "date" ? parseDate(v) ?? v : v]
   }))
 }
@@ -40,7 +40,7 @@ const PER = { "10": "10", "50": "50", "100": "100", all: "All" } as const
 
 export default async function Vouchers({ searchParams }: PageProps<"/voucher/vouchers">) {
   const params = toParams(await searchParams)
-  const { rows, error, pull, columns } = await getData()
+  const { rows, error, pull, columns, today } = await getData()
   const shown = filterRows(rows, params)
   const tab = (params.get("tab") ?? "") in TABS ? (params.get("tab") as Tab) : "all"
   const per = (params.get("per") ?? "") in PER ? (params.get("per") as keyof typeof PER) : "50"
@@ -53,6 +53,7 @@ export default async function Vouchers({ searchParams }: PageProps<"/voucher/vou
   const isNew = !panelRow && params.has("new")
   const panel = !!panelRow || isNew
   const closeUrl = "/voucher/vouchers/" + qs(params, { open: null, new: null })
+  const dvNos = rows.map((r) => r.dv_no)
 
   const chips: [string, string][] = []
   const area = params.get("area"), month = params.get("month"), issue = params.get("issue"), q = params.get("q"), year = params.get("year")
@@ -159,7 +160,8 @@ export default async function Vouchers({ searchParams }: PageProps<"/voucher/vou
                     <LinkRow key={r.sheet_row} href={openUrl} data-state={panelRow?.sheet_row === r.sheet_row ? "selected" : undefined}>
                       <TableCell className={cn(panel && "hidden")}><RowCheck row={r.sheet_row} label={r.dv_no} /></TableCell>
                       <TableCell>
-                        <Link className="font-medium hover:underline" href={openUrl} scroll={false}>{r.dv_no || "Untitled DV"}</Link>
+                        {/* No prefetch: a page of rows would be a page of requests. */}
+                        <Link className="font-medium hover:underline" href={openUrl} scroll={false} prefetch={false}>{r.dv_no || "Untitled DV"}</Link>
                         <div className="text-xs text-muted-foreground">{(r.dv ? longDate(r.dv) : r.dv_date) || "No date"}</div>
                       </TableCell>
                       <TableCell className="w-full max-w-0">
@@ -176,7 +178,7 @@ export default async function Vouchers({ searchParams }: PageProps<"/voucher/vou
                         <div className="flex flex-col items-start gap-1">
                           {isVerified(r)
                             ? <Badge variant="outline" className="border-primary/40 text-primary"><BadgeCheckIcon data-icon="inline-start" />{VERIFIED}</Badge>
-                            : <span className="whitespace-nowrap text-muted-foreground">{FOR_REVIEW}</span>}
+                            : <span className="whitespace-nowrap text-muted-foreground">{r.status.trim() || FOR_REVIEW}</span>}
                           {r.issues.length > 0 && <IssueBadges issues={r.issues} />}
                         </div>
                       </TableCell>
@@ -235,7 +237,8 @@ export default async function Vouchers({ searchParams }: PageProps<"/voucher/vou
         <VoucherPanel
           key={panelRow ? `${panelRow.sheet_row}:${Object.values(formFromRow(panelRow, columns)).join("|")}` : "new"}
           row={panelRow?.sheet_row ?? null}
-          initial={formFromRow(panelRow, columns)}
+          initial={isNew ? { ...formFromRow(null, columns), dv_date: today, dv_no: nextDvNo(dvNos, today) } : formFromRow(panelRow, columns)}
+          dvNos={isNew ? dvNos : undefined}
           columns={columns}
           heading={isNew ? "New voucher" : panelRow!.dv_no || "Untitled DV"}
           status={panelRow ? <IssueBadges issues={panelRow.issues} /> : "Adds a new row at the bottom of the sheet."}

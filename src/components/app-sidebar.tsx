@@ -69,14 +69,16 @@ export function AppSidebar({ module, counts, sheetTitle, synced, sheetUrl }: Pro
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" tooltip={`Open ${sheetTitle || "Google Sheet"}`} className="h-auto min-h-12"
-              render={sheetUrl ? <a href={sheetUrl} target="_blank" rel="noopener" /> : <div />}>
+            {/* The file's name, opening it; collapsed, only the icon (its name in the tooltip). */}
+            <SidebarMenuButton size="lg" tooltip={`Open ${sheetTitle || "Google Sheet"}`}
+              className="h-auto min-h-12 group-data-[collapsible=icon]:min-h-0 group-data-[collapsible=icon]:p-2!"
+              render={sheetUrl ? <a href={sheetUrl} target="_blank" rel="noopener" aria-label={`Open ${sheetTitle || "Google Sheet"}`} /> : <div />}>
               <FileSpreadsheetIcon />
-              <span className="flex min-w-0 flex-col text-xs leading-tight">
+              <span className="flex min-w-0 flex-col text-xs leading-tight group-data-[collapsible=icon]:hidden">
                 <strong className="text-sm font-medium break-words">{sheetTitle || "Google Sheet"}</strong>
                 <span className="truncate text-sidebar-foreground/70">{synced}</span>
               </span>
-              {sheetUrl && <ExternalLinkIcon className="ml-auto opacity-70" />}
+              {sheetUrl && <ExternalLinkIcon className="ml-auto opacity-70 group-data-[collapsible=icon]:hidden" />}
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

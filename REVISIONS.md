@@ -198,3 +198,29 @@ Net: about -730 lines, -0 deps (`shadcn`, `server-only` and `cn` are all used: `
 
 - [ ] **Browser check (signed in):** dashboards, trade-area list, Status field and the Word downloads on real data.
 - [ ] `npm test` needs Node 22.18+ (or `--experimental-strip-types`) to run the `.ts` tests.
+
+## R8 · QOL updates · 2026-11-05
+
+**Goal:** quicker navigation, DV numbers filled in for you, sheet edits that appear on their own, saved reports that carry the logos, and New/Edit DV forms that follow the sheet.
+
+### Done
+
+- [x] **DV # autofill:** New DV opens with today's date and `nextDvNo`. The number follows the date until the user types their own. An append now re-reads the sheet first; a number already taken becomes the next free one (`freeDvNo`, shared with `renumberVoucher`) and the toast says so.
+- [x] **New/Edit DV follow the sheet:** the detected layout is now the default (`SHEET_LAYOUT=fixed` rolls back), so labels are the sheet's own headers and added columns appear as inputs. Reading starts at the first row with a date or a DV # in format, so the label and totals rows stay out; on the live sheet both layouts read the same 641 vouchers and ₱25,635,598.86. Status keeps its colours from R7 but takes its options from the Selection List, and saving no longer turns other values into For Review. Dropdown values match regardless of capitalization, so opening and saving a voucher doesn't rewrite "Verified" as "VERIFIED".
+- [x] **Saved reports:** PDF logos use the original files, loaded eagerly, and appear small on every later page. The button reads "Save as PDF" and suggests the report's name and period (`reportFile`, shared with the CSV and Word routes). The Word letterhead now has the three logos, on its first page; `next.config.ts` ships them with the Word routes.
+- [x] **Report page fit:** corrected the row estimates (borders, the register's gaps, all-caps names). Now no page runs past the paper in the voucher full report on Short, Long or A4 (94, 74 and 87 pages) or in the collection full report on Short (43 pages).
+- [x] **Sidebar:** R7's skeletons already give instant feedback and prefetching, so only voucher row links changed (no prefetch). Opening a row doesn't bring the skeleton back. The file link, collapsed, is the icon alone, with the file's name in the tooltip and accessible label.
+- [x] **Sync:** a cache older than 60 s is served at once and refreshed behind it (`pullPlan`, tested). One pull runs at a time, failures wait 15 s before retrying, and a write or Sync still waits for fresh data. Open pages refresh every minute and when the tab regains focus, unless a form has unsaved edits or a dialog or toast is open.
+- [x] `tsc`, `eslint`, `node --test` and `next build` pass. Checked against the live sheet with a read-only local session (no Google token, so writes are refused).
+
+### Not changed
+
+- The sidebar's collapse animation stays: re-laying out the table took 2.7 ms on average (9.9 ms at worst) at 50 rows, inside a 16 ms frame. The same check at 641 rows was inconclusive.
+
+### Follow-ups
+
+- [ ] **Real save:** saving a New or Edit DV, including the "already taken" path, needs a signed-in Editor. It has unit tests for the rule but hasn't been run end to end.
+- [ ] **Open the files:** the Word files were checked as valid packages holding the three logos, and the PDF file name was checked, but neither was opened in Word or a PDF viewer.
+- [ ] **Lists vs cell rules:** columns J and K only allow values from `O4:O45` and `P5:P38` (strict), but the form offers the Selection List. `(BLANK)`, `CENTER ADMINISTRATION`, `ELECTRECITY` and the list's own header in J, and `(BLANK)` in K, aren't in those ranges, so Google may refuse them. Status spells its options in capitals in the Selection List but "For Review" / "Verified" in column L's rule. Align them in the sheet.
+- [ ] **DV # rule:** confirm the format with accounting (see the note at `DV_FORMAT`). A mistyped high number pushes every later number up, since the sequence follows the year's highest.
+- [ ] **Several server instances:** each keeps its own cache, so Sync on one doesn't update another at once. If that shows up on Vercel, move to `unstable_cache` with `revalidateTag`.

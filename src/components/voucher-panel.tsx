@@ -16,13 +16,14 @@ import { Kbd } from "@/components/ui/kbd"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
-import { FOR_REVIEW, VERIFIED } from "@/lib/ledger"
+import { nextDvNo, sameChoice, VERIFIED } from "@/lib/ledger"
 import { cn } from "@/lib/utils"
 import type { Column } from "@/lib/sheet-config"
 
 type Props = {
   row: number | null // null = new voucher
   initial: Record<string, string> // by column key
+  dvNos?: string[] // every DV # in use, for a new voucher's number to follow its date
   columns: Column[] // the sheet's columns in sheet order; the form is built from them
   heading: string
   status: React.ReactNode
@@ -32,17 +33,17 @@ type Props = {
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/
 
-/** Status wears its state, as on the Dashboard: indigo with a tick when Verified, the blue outlined square when For review. */
-function StatusSelect(props: React.ComponentProps<typeof NativeSelect>) {
+/** Status wears its state, as on the Dashboard: indigo with a tick when Verified, the blue outlined square otherwise. Its choices are the sheet's. */
+function StatusSelect({ choices, ...props }: React.ComponentProps<typeof NativeSelect> & { choices: string[] }) {
   const [value, setValue] = React.useState(String(props.defaultValue ?? ""))
-  const verified = value.trim().toLowerCase() === VERIFIED.toLowerCase()
+  const verified = sameChoice(value, VERIFIED)
   return (
     <div className="relative">
       <NativeSelect {...props} onChange={(e) => setValue(e.target.value)}
         className={cn("w-full [&_select]:pl-8 [&_select]:font-medium",
           verified ? "[&_select]:border-primary [&_select]:bg-primary/10 [&_select]:text-primary [&_svg]:text-primary" : "[&_select]:border-review [&_select]:bg-review/10")}>
-        <NativeSelectOption value={FOR_REVIEW}>{FOR_REVIEW}</NativeSelectOption>
-        <NativeSelectOption value={VERIFIED}>{VERIFIED}</NativeSelectOption>
+        <NativeSelectOption value="">Not set</NativeSelectOption>
+        {choices.map((v) => <NativeSelectOption key={v} value={v}>{v}</NativeSelectOption>)}
       </NativeSelect>
       {verified
         ? <CheckIcon aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-primary" />
@@ -51,15 +52,20 @@ function StatusSelect(props: React.ComponentProps<typeof NativeSelect>) {
   )
 }
 
-export function VoucherPanel({ row, initial, columns, heading, status, source, closeUrl }: Props) {
+export function VoucherPanel({ row, initial, dvNos, columns, heading, status, source, closeUrl }: Props) {
   const router = useRouter()
   const { run, setDirty } = useUI()
   const [changed, setChanged] = React.useState<string[]>([])
   const [error, setError] = React.useState("")
   React.useEffect(() => () => setDirty(""), [setDirty]) // closing the panel drops the guard
   const shown = columns.filter((c) => c.visibility !== "hidden")
+  const autoNo = React.useRef(initial.dv_no) // the number last filled in; once the user types another, it stays theirs
 
   const onInput = (e: React.FormEvent<HTMLFormElement>) => {
+    const { name, value } = e.target as HTMLInputElement
+    const dvNo = e.currentTarget.elements.namedItem("dv_no") as HTMLInputElement | null
+    if (dvNos && dvNo && name === "dv_date" && ISO.test(value) && dvNo.value === autoNo.current)
+      dvNo.value = autoNo.current = nextDvNo(dvNos, value)
     const data = new FormData(e.currentTarget)
     const list = shown.filter((c) => c.visibility === "shown" && String(data.get(c.key) ?? "") !== (initial[c.key] ?? "")).map((c) => c.label)
     setChanged(list)
@@ -82,10 +88,10 @@ export function VoucherPanel({ row, initial, columns, heading, status, source, c
   const input = (c: Column) => {
     const value = initial[c.key] ?? ""
     const common = { id: c.key, name: c.key, defaultValue: value, disabled: c.visibility === "readonly" }
-    if (c.field === "status") return <StatusSelect {...common} />
+    // A value already in the row stays selectable even if the list dropped it.
+    const choices = c.options.includes(value) || !value ? c.options : [value, ...c.options]
+    if (c.field === "status") return <StatusSelect {...common} choices={choices} />
     if (c.type === "dropdown") {
-      // A value already in the row stays selectable even if the list dropped it.
-      const choices = c.options.includes(value) || !value ? c.options : [value, ...c.options]
       return (
         <NativeSelect {...common} className="w-full">
           <NativeSelectOption value="">Not set</NativeSelectOption>

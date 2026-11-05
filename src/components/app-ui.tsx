@@ -106,7 +106,24 @@ export function AppUI({ children }: { children: React.ReactNode }) {
     }
   }, [leave, router])
 
-  const ui = React.useMemo(() => ({ confirm, run, setDirty, leave }), [confirm, run, setDirty, leave])
+  React.useEffect(() => {
+    // Sheet edits appear unasked: every minute while visible, and on coming back to the tab.
+    // Never over unsaved edits or an open dialog. A stale read pulls behind it, so an edit shows within two rounds.
+    let last = Date.now()
+    const tick = () => {
+      if (document.hidden || dirty.current || document.querySelector("[role=dialog], [role=alertdialog]") || Date.now() - last < 30_000) return
+      last = Date.now()
+      startTransition(() => router.refresh())
+    }
+    const id = setInterval(tick, 60_000)
+    document.addEventListener("visibilitychange", tick)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener("visibilitychange", tick)
+    }
+  }, [router])
+
+  const ui =React.useMemo(() => ({ confirm, run, setDirty, leave }), [confirm, run, setDirty, leave])
   return (
     <Ctx value={ui}>
       {children}

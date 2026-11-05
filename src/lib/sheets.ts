@@ -1,12 +1,14 @@
 import "server-only"
 
+import { after } from "next/server"
+
 import { FIELDS, serialDate, type RawVoucher } from "@/lib/ledger"
-import { colLetter, META, readSheet, savedFrom, type Cell, type Column, type List, type Metadata, type Saved, type SheetModel } from "@/lib/sheet-config"
+import { CACHE_SECONDS, colLetter, META, pullPlan, readSheet, savedFrom, type Cell, type Column, type List, type Metadata, type Saved, type SheetModel } from "@/lib/sheet-config"
 
 // The layout itself (fixed fallback, detection, saved settings) lives in sheet-config.ts.
-// SHEET_LAYOUT=detected reads and writes through the layout found in the sheet (saved settings, then detection);
-// anything else keeps the fixed A:L layout of R5 Phase 0. It is also the rollback switch.
-export const LAYOUT_MODE = process.env.SHEET_LAYOUT === "detected" ? "detected" : "fixed"
+// Reads and writes go through the layout found in the sheet (saved settings, then detection), so the form follows its columns.
+// SHEET_LAYOUT=fixed is the rollback switch: the fixed A:L layout of R5 Phase 0.
+export const LAYOUT_MODE = process.env.SHEET_LAYOUT === "fixed" ? "fixed" : "detected"
 // Dropdown choices come from the "Selection List" tab, one column per list, matched to sheet columns by row-1 header.
 const LISTS_TAB = "'Selection List'"
 // Codes and names, not numbers or dates: written RAW so Google never converts them.
@@ -23,10 +25,11 @@ const API_KEY = process.env.GOOGLE_SHEET_API_KEY ?? ""
 const API = "https://sheets.googleapis.com/v4/spreadsheets"
 
 // ponytail: in-process cache, one pull per minute per server instance; move to a shared store if instances disagree too long
-export const CACHE_SECONDS = 60
+export { CACHE_SECONDS }
 // Everyone who can reach the cache has already proven sheet access at sign-in (see auth/callback).
-type Pull = {
-  ts: number
+type Freshness = { ts: number; tried: number; error: string | null; running: Promise<string | null> | null }
+type Pull = Freshness & {
+  gen: number // counts writes, so a pull that began before one isn't taken as fresh
   rows: RawVoucher[]
   title: string
   sheetId: number | null // the tab's grid ID, for row and column metadata
@@ -40,7 +43,7 @@ type Pull = {
 const pulls = new Map<string, Pull>() // keyed by sheet ID
 function state(): Pull {
   if (!pulls.has(SHEET_ID))
-    pulls.set(SHEET_ID, { ts: 0, rows: [], title: "", sheetId: null, at: null, values: [], lists: [], saved: null, model: null, candidate: null })
+    pulls.set(SHEET_ID, { ts: 0, tried: 0, error: null, running: null, gen: 0, rows: [], title: "", sheetId: null, at: null, values: [], lists: [], saved: null, model: null, candidate: null })
   return pulls.get(SHEET_ID)!
 }
 
@@ -95,24 +98,42 @@ async function pullMeta(token: string | null) {
   pull.sheetId = meta?.sheets?.find((s: { properties: { title: string } }) => s.properties.title === SHEET_RANGE)?.properties?.sheetId ?? null
 }
 
+/** Carry out pullPlan for one cache, one pull at a time. Returns the last pull's error. */
+async function keepFresh(f: Freshness, force: boolean, pull: () => Promise<string | null>) {
+  const start = () => (f.running ??= pull().then((error) => (f.error = error)).finally(() => { f.running = null }))
+  const plan = pullPlan({ ...f, running: !!f.running }, force, Date.now())
+  if (plan === "wait") {
+    await f.running // it may have begun before a write, so it doesn't settle this read by itself
+    if (force || !f.ts) {
+      f.tried = Date.now()
+      await start()
+    }
+  } else if (plan === "background") {
+    f.tried = Date.now() // so only this request schedules it
+    after(start)
+  }
+  return f.error
+}
+
+async function pullVouchers(token: string | null): Promise<string | null> {
+  const pull = state(), gen = pull.gen
+  const [[values, error], lists, saved] = await Promise.all([pullValues(token), pullLists(token), pullSaved(token)])
+  // Only a good pull replaces the shared cache, so one user's bad token can't blank it for everyone.
+  if (error !== null) return error
+  const use = { lists: lists ?? pull.lists, saved: saved === undefined ? pull.saved : saved }
+  const candidate = readSheet(values, use)
+  const model = LAYOUT_MODE === "detected" ? candidate : readSheet(values, { ...use, fixed: true })
+  Object.assign(pull, { ts: gen === pull.gen ? Date.now() : 0, at: new Date(), values, ...use, candidate, model, rows: toRows(values, model) })
+  return null
+}
+
 /**
- * Pull rows from the sheet, cached for CACHE_SECONDS (force skips the cache).
+ * Rows from the cache, kept fresh by keepFresh (force waits for a new pull).
  * Returns [rows, error]; each row keeps sheet_row, its 1-indexed row number, for writes.
  */
 export async function fetchVouchers(token: string | null, force = false): Promise<[RawVoucher[], string | null]> {
-  let error: string | null = null
   const pull = state()
-  if (force || Date.now() - pull.ts > CACHE_SECONDS * 1000) {
-    const [[values, err], lists, saved] = await Promise.all([pullValues(token), pullLists(token), pullSaved(token)])
-    error = err
-    // Only a good pull replaces the shared cache, so one user's bad token can't blank it for everyone.
-    if (error === null) {
-      const use = { lists: lists ?? pull.lists, saved: saved === undefined ? pull.saved : saved }
-      const candidate = readSheet(values, use)
-      const model = LAYOUT_MODE === "detected" ? candidate : readSheet(values, { ...use, fixed: true })
-      Object.assign(pull, { ts: Date.now(), at: new Date(), values, ...use, candidate, model, rows: toRows(values, model) })
-    }
-  }
+  const error = await keepFresh(pull, force, () => pullVouchers(token))
   return [pull.rows.map((r) => ({ ...r, extra: { ...r.extra } })), error]
 }
 
@@ -179,7 +200,8 @@ async function send(token: string | null, url: string, method: string, body: unk
   if (!token) return [null, "Sign in with Google to save changes to the sheet."]
   try {
     const response = await call(url, token, { method, body: JSON.stringify(body) })
-    state().ts = 0 // next read pulls fresh
+    const pull = state()
+    Object.assign(pull, { ts: 0, tried: 0, gen: pull.gen + 1 }) // next read waits for a fresh pull
     return [response, null]
   } catch (exc) {
     return [null, "Not saved: your Google account " + explain(exc)]
@@ -338,22 +360,23 @@ export const sheetUrl = SHEET_ID ? `https://docs.google.com/spreadsheets/d/${SHE
 
 // ---- Collection sheet (read-only) ----
 
-type CollectionPull = { ts: number; at: Date | null; title: string; values: Cell[][] }
-const collectionPull: CollectionPull = { ts: 0, at: null, title: "", values: [] }
+type CollectionPull = Freshness & { at: Date | null; title: string; values: Cell[][] }
+const collectionPull: CollectionPull = { ts: 0, tried: 0, error: null, running: null, at: null, title: "", values: [] }
+
+async function pullCollections(token: string | null): Promise<string | null> {
+  const tab = `'${COLLECTION_RANGE.replaceAll("'", "''")}'`
+  const [[values, err], title] = await Promise.all([
+    pullValues(token, COLLECTION_SHEET_ID, tab),
+    call(`${API}/${COLLECTION_SHEET_ID}?fields=properties.title`, token).then((m) => String(m?.properties?.title ?? ""), () => collectionPull.title),
+  ])
+  if (err !== null) return err.replace("Couldn't read the sheet", `Couldn't read the ${COLLECTION_RANGE} tab`)
+  Object.assign(collectionPull, { ts: Date.now(), at: new Date(), title, values })
+  return null
+}
 
 /** The Collection tab's cells and the spreadsheet's title, cached like the vouchers. Returns [pull, error]. */
 export async function fetchCollectionValues(token: string | null, force = false): Promise<[CollectionPull, string | null]> {
-  let error: string | null = null
-  if (force || Date.now() - collectionPull.ts > CACHE_SECONDS * 1000) {
-    const tab = `'${COLLECTION_RANGE.replaceAll("'", "''")}'`
-    const [[values, err], title] = await Promise.all([
-      pullValues(token, COLLECTION_SHEET_ID, tab),
-      call(`${API}/${COLLECTION_SHEET_ID}?fields=properties.title`, token).then((m) => String(m?.properties?.title ?? ""), () => collectionPull.title),
-    ])
-    error = err && err.replace("Couldn't read the sheet", `Couldn't read the ${COLLECTION_RANGE} tab`)
-    if (error === null) Object.assign(collectionPull, { ts: Date.now(), at: new Date(), title, values })
-  }
-  return [collectionPull, error]
+  return [collectionPull, await keepFresh(collectionPull, force, () => pullCollections(token))]
 }
 
 export const collectionSheetUrl = COLLECTION_SHEET_ID ? `https://docs.google.com/spreadsheets/d/${COLLECTION_SHEET_ID}` : ""

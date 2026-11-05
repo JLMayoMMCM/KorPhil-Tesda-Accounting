@@ -12,7 +12,7 @@ import { entryMonths, tags } from "@/lib/collection"
 import { buildCollectionReport, COLLECTION_CLUSTERS, collectionTitle } from "@/lib/collection-reports"
 import { getCollectionData } from "@/lib/data"
 import { monthLabel, qs, toParams } from "@/lib/ledger"
-import { manilaTime, PERIODS } from "@/lib/reports"
+import { manilaTime, PERIODS, reportFile } from "@/lib/reports"
 import { fullName } from "@/lib/session"
 
 export const metadata: Metadata = { title: "Reports · Collections" }
@@ -70,7 +70,7 @@ export default async function CollectionReports({ searchParams }: PageProps<"/co
           <Button variant="outline" render={<a href={"/collection/reports/docx/" + qs(params)} download />} nativeButton={false}>
             <FileTextIcon data-icon="inline-start" />Download Word
           </Button>
-          <PrintButton />
+          <PrintButton filename={`collections-${reportFile(kind, scope)}`} />
           <span className="text-sm text-muted-foreground tabular-nums">{pages.length} page{pages.length === 1 ? "" : "s"}</span>
         </div>
       </Form>

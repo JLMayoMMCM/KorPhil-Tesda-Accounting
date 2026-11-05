@@ -20,7 +20,9 @@ export const FIELDS = Object.keys(FIELD_LABELS) as Field[]
 // Column L: anything but "Verified" (blank included) counts as for review.
 export const VERIFIED = "Verified"
 export const FOR_REVIEW = "For Review"
-export const isVerified = (r: RawVoucher) => r.status.trim().toLowerCase() === VERIFIED.toLowerCase()
+/** Dropdown values match however they're capitalized or spaced: the sheet says "Verified" where its list says "VERIFIED". */
+export const sameChoice = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
+export const isVerified = (r: RawVoucher) => sameChoice(r.status, VERIFIED)
 
 // Review checks: gaps an auditor would ask about, in the order the Workspace lists them.
 export const ISSUES = {
@@ -259,6 +261,9 @@ export function nextDvNo(used: Iterable<string>, iso: string, taken: Iterable<st
   }
   return `06-${year}-${iso.slice(5, 7)}-${String(max + 1).padStart(5, "0")}`
 }
+
+/** dv if nobody holds it yet, else the next free number for a voucher dated iso. */
+export const freeDvNo = (used: string[], dv: string, iso: string) => (used.includes(dv) ? nextDvNo(used, iso) : dv)
 
 export type Chunk = { block: number; from: number; to: number }
 /**

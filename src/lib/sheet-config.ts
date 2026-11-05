@@ -38,6 +38,22 @@ export const HEADERS: Record<Field, string[]> = {
 export const REQUIRED: Field[] = ["dv_no", "dv_date", "gross_amount"]
 const SEARCH_ROWS = 20
 
+// ---- When to pull ----
+
+export const CACHE_SECONDS = 60
+export const RETRY_SECONDS = 15
+
+/**
+ * What a read does about the cache. ts: last good pull, 0 for none or after a write. tried: last attempt, kept from
+ * repeating within RETRY_SECONDS, so an outage doesn't stall every click on Google's timeout.
+ * wait: the caller needs this pull's data. background: serve what's cached now and pull behind it.
+ */
+export function pullPlan({ ts, tried, running }: { ts: number; tried: number; running: boolean }, force: boolean, now: number): "wait" | "background" | "none" {
+  const due = now - tried > RETRY_SECONDS * 1000
+  if (force || (!ts && (due || running))) return "wait"
+  return ts && due && !running && now - ts > CACHE_SECONDS * 1000 ? "background" : "none"
+}
+
 // ---- One spec per sheet, so each module reads its own tab without touching the other's ----
 
 /** A sheet's known columns: header text accepted per field, the fields it can't do without, and how far right to look. */
@@ -172,6 +188,7 @@ const NUMBER_TEXT = /^[₱\s]*[+-]?(\d{1,3}(,\d{3})+|\d+)?(\.\d+)?$/
 const SAMPLE = /\b(sample|example|instructions?|e\.g)\b/i
 const PLACEHOLDER_DV = /yyyy|^06-\d{4}-\d{2}-0{5}$/i
 const DV = /^06-\d{4}-(0[1-9]|1[0-2])-\d{5}$/
+const isDate = (v: Cell | undefined) => (typeof v === "number" && v > 0) || DATE_TEXT.test(String(v ?? "").trim())
 
 /** Is this row a voucher? Sparse real vouchers stay vouchers; anything doubtful is "unsure", for a person to confirm. */
 export function classifyRow(row: Cell[], columns: Layout["columns"]): RowClass {
@@ -184,8 +201,7 @@ export function classifyRow(row: Cell[], columns: Layout["columns"]): RowClass {
 
   const amount = at("gross_amount")
   const hasAmount = typeof amount === "number" || (String(amount).trim() !== "" && NUMBER_TEXT.test(String(amount).trim()))
-  const date = at("dv_date")
-  const hasDate = (typeof date === "number" && date > 0) || DATE_TEXT.test(String(date).trim())
+  const hasDate = isDate(at("dv_date"))
   const hasPayee = text("payee") !== ""
   if (hasAmount && !hasDate && !hasPayee && !text("particulars") && !text("dv_no")) return { kind: "skip", reason: "Totals or subtotal" }
   // Any DV # counts as a signal too, so a real voucher with most data missing stays a voucher (the review queue flags it).
@@ -285,6 +301,9 @@ export function readSheet(values: Cell[][], { saved = null as Saved | null, list
   const layout = found ?? fixedLayout()
   const ignored = new Set(source === "saved" ? saved!.ignored : [])
   const vouchers: number[] = [], skipped: SheetModel["skipped"] = []
+  // Labels and totals sit between the header and the ledger, so reading starts at the first row with a date or a DV # in format.
+  const first = source === "fixed" || OVERRIDES.firstRow ? layout.firstRow : values.findIndex((raw, i) =>
+    i + 1 >= layout.firstRow && (isDate(raw[layout.columns.dv_date ?? -1]) || DV.test(String(raw[layout.columns.dv_no ?? -1] ?? "").trim()))) + 1
   values.forEach((raw, i) => {
     const row = i + 1
     if (row < layout.firstRow) return
@@ -292,7 +311,9 @@ export function readSheet(values: Cell[][], { saved = null as Saved | null, list
       if (raw.some((v) => v !== "")) vouchers.push(row) // the pre-R5 rule: every non-blank row from row 5
       return
     }
-    const c: RowClass = ignored.has(row) ? { kind: "skip", reason: "Ignored in Settings" } : classifyRow(raw, layout.columns)
+    const above = row < first
+    const c: RowClass = above ? (raw.some((v) => String(v).trim() !== "") ? { kind: "skip", reason: "Above the first voucher" } : { kind: "skip", reason: "Blank" })
+      : ignored.has(row) ? { kind: "skip", reason: "Ignored in Settings" } : classifyRow(raw, layout.columns)
     if (c.kind !== "skip") vouchers.push(row)
     if (c.kind !== "voucher" && c.reason !== "Blank")
       skipped.push({ ...c, row, preview: raw.map((v) => String(v).trim()).filter(Boolean).slice(0, 4).join(" · ").slice(0, 80) })

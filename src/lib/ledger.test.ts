@@ -2,9 +2,9 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { blank, byIssue, DV_FORMAT, enrich, label, nextDvNo, filterRows, inTab, labelOf, median, monthsBack, paginate, parseAmount, parseDate, peso, qs, serialDate, sheetDate, total, yearThrough, type RawVoucher } from "./ledger.ts"
+import { blank, byIssue, DV_FORMAT, enrich, freeDvNo, label, nextDvNo, filterRows, inTab, labelOf, median, monthsBack, paginate, parseAmount, parseDate, peso, qs, sameChoice, serialDate, sheetDate, total, yearThrough, type RawVoucher } from "./ledger.ts"
 import { collected, deposited, depositsByType, filterEntries, readCollections, undeposited } from "./collection.ts"
-import { classifyRow, colLetter, detectLayout, fixedLayout, HEADERS, inferType, layoutDiff, META, normalize, readSheet, savedFrom } from "./sheet-config.ts"
+import { classifyRow, colLetter, detectLayout, fixedLayout, HEADERS, inferType, layoutDiff, META, normalize, pullPlan, readSheet, savedFrom } from "./sheet-config.ts"
 import { documentXml, zip } from "./docx.ts"
 import { inflateRawSync } from "node:zlib"
 
@@ -80,6 +80,26 @@ test("nextDvNo", () => {
   assert.equal(nextDvNo(used, "2025-12-01"), "06-2025-12-00901") // trimmed; other years don't count
   assert.equal(nextDvNo([], "2027-01-02"), "06-2027-01-00001")
   assert.ok(DV_FORMAT.test("06-2026-08-00659") && !DV_FORMAT.test("06-2026-8-659"))
+  assert.equal(freeDvNo(["06-2026-08-00659"], "06-2026-08-00660", "2026-08-17"), "06-2026-08-00660") // free: kept
+  assert.equal(freeDvNo(["06-2026-08-00659"], "06-2026-08-00659", "2026-09-01"), "06-2026-09-00660") // taken: next free
+})
+
+test("sameChoice", () => {
+  assert.ok(sameChoice(" Verified ", "VERIFIED")) // the sheet's spelling and its list's count as one choice
+  assert.ok(!sameChoice("Verified", "UNVERIFIED"))
+})
+
+test("pullPlan", () => {
+  const now = 1_000_000, ago = (s: number) => now - s * 1000
+  const plan = (ts: number, tried: number, running = false, force = false) => pullPlan({ ts, tried, running }, force, now)
+  assert.equal(plan(0, 0), "wait") // nothing cached, or just written
+  assert.equal(plan(ago(10), ago(10)), "none") // fresh
+  assert.equal(plan(ago(61), ago(61)), "background") // stale: serve it, pull behind it
+  assert.equal(plan(ago(61), ago(5)), "none") // failed just now: no retry on every click
+  assert.equal(plan(ago(61), ago(61), true), "none") // already pulling
+  assert.equal(plan(0, ago(5)), "none") // nothing cached and failed just now: show the error
+  assert.equal(plan(0, ago(5), true), "wait") // nothing cached, a pull is coming
+  assert.equal(plan(ago(10), ago(10), false, true), "wait") // Sync
 })
 
 test("paginate", () => {
@@ -150,8 +170,12 @@ test("reading the sheet through a layout", () => {
   const d = readSheet(exp, { lists })
   assert.equal(d.source, "detected")
   assert.deepEqual(d.vouchers, [5, 7]) // month divider and totals skipped
-  assert.deepEqual(d.skipped.map((r) => [r.row, r.reason]), [[4, "Totals or subtotal"], [6, "Text in only one or two cells"], [8, "Totals or subtotal"]])
+  assert.deepEqual(d.skipped.map((r) => [r.row, r.reason]), [[4, "Above the first voucher"], [6, "Text in only one or two cells"], [8, "Totals or subtotal"]])
   assert.equal(d.nextRow, 9) // the totals row below the last voucher is never written over
+
+  // The EXP tab: header on row 1, then a label row and a totals row that look like vouchers, then the ledger.
+  const top = [header, ["..", "", "", "Cash Bal. Book", "Cash bal", "", "", "", "(BLANK)"], [0, "", 61, 486229, "x", 25635598, "", "", "(BLANK)", "(BLANK)", "", "Verified"], v("06-2026-01-00001")]
+  assert.deepEqual(readSheet(top).vouchers, [4])
   const type = (key: string) => d.columns.find((c) => c.key === key)?.type
   assert.deepEqual([type("dv_date"), type("gross_amount"), type("particulars"), type("trade_area"), type("category")], ["date", "money", "long", "dropdown", "dropdown"])
   assert.deepEqual(d.columns.find((c) => c.key === "trade_area")!.options, ["ADMIN", "AUTO"]) // matched by list header
@@ -241,6 +265,9 @@ test("collection tab", () => {
 test("docx", () => {
   const xml = documentXml("T", "S", "Office", [{ title: "A", highlights: [], head: ["x"], width: [1], right: [false], rows: [["a & <b>"]], notes: [] }])
   assert.match(xml, /a &amp; &lt;b&gt;/)
+  assert.deepEqual(xml.match(/r:embed="rId\d"/g), ['r:embed="rId2"', 'r:embed="rId3"', 'r:embed="rId4"']) // the three letterhead logos
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47]), one = zip([["a.png", png]]) // a binary part comes back byte for byte
+  assert.deepEqual(inflateRawSync(one.subarray(30 + one.readUInt16LE(26), 30 + one.readUInt16LE(26) + one.readUInt32LE(18))), png)
   // Control characters pasted from the sheet are illegal in XML and would stop Word opening the file.
   const pasted = documentXml("T", "S", "Office", [{ title: "A", highlights: [], head: ["x"], width: [1], right: [false], rows: [["tab\there\u000Bvt\u0001"]], notes: [] }])
   assert.match(pasted, /tab\therevt</)

@@ -6,7 +6,7 @@ import { redirect } from "next/navigation"
 
 import { readCollections } from "@/lib/collection"
 import { getSession } from "@/lib/data"
-import { DV_FORMAT, FIELDS, FOR_REVIEW, nextDvNo, parseAmount, parseDate, sheetDate, todayManila, VERIFIED, type RawVoucher } from "@/lib/ledger"
+import { DV_FORMAT, FIELDS, FOR_REVIEW, freeDvNo, parseAmount, parseDate, sameChoice, sheetDate, todayManila, VERIFIED, type RawVoucher } from "@/lib/ledger"
 import { SESSION_COOKIE } from "@/lib/session"
 import { INPUT_TYPES, REQUIRED, VISIBILITY, type Column, type ColumnSetting, type InputType, type Saved, type Visibility } from "@/lib/sheet-config"
 import { appendVoucher, fetchCollectionValues, fetchVouchers, lastPull, readWith, saveSettings, setDvNo, setStatuses, updateVoucherCells } from "@/lib/sheets"
@@ -26,7 +26,6 @@ function clean(form: FormData, columns: Column[]): [Record<string, string>, stri
     if (c.visibility !== "shown") continue // read-only and hidden columns are never written
     let v = String(form.get(c.key) ?? "").trim()
     if (c.type === "date" && ISO_DATE.test(v)) v = sheetDate(v)
-    if (c.field === "status" && v !== VERIFIED) v = FOR_REVIEW
     values[c.key] = v
   }
   if (!values.dv_no) return [values, "DV # is required."]
@@ -37,24 +36,33 @@ function clean(form: FormData, columns: Column[]): [Record<string, string>, stri
 const current = (r: RawVoucher, c: Column) => (c.field ? r[c.field] : r.extra?.[c.key] ?? "")
 
 /**
- * Append (sheetRow null) or update one voucher row. An update re-reads the sheet first: the row must still hold
- * `dvNo` (its DV # when the form opened), and only the columns that differ from the sheet are written.
+ * Append (sheetRow null) or update one voucher row. The sheet is re-read first. An append whose DV # someone else
+ * just used takes the next free number. An update's row must still hold `dvNo` (its DV # when the form opened),
+ * and only the columns that differ from the sheet are written.
  */
 export async function saveVoucher(sheetRow: number | null, form: FormData, dvNo = ""): Promise<Result> {
   if (sheetRow !== null && !isRow(sheetRow)) return { ok: false, message: "That row isn't a voucher row." }
   const { access_token: token, user } = await getSession()
-  const [rows, pullError] = await fetchVouchers(token, sheetRow !== null)
+  const [rows, pullError] = await fetchVouchers(token, true)
   if (pullError) return { ok: false, message: pullError }
   const columns = lastPull().model?.columns ?? []
   const [values, invalid] = clean(form, columns)
   if (invalid) return { ok: false, message: invalid }
   let error: string | null
-  if (sheetRow === null) error = await appendVoucher(token, values, user.email)
-  else {
+  if (sheetRow === null) {
+    const typed = values.dv_no
+    if (DV_FORMAT.test(typed)) values.dv_no = freeDvNo(rows.map((r) => r.dv_no.trim()), typed, parseDate(values.dv_date ?? "") ?? todayManila())
+    error = await appendVoucher(token, values, user.email)
+    if (!error && values.dv_no !== typed) {
+      refresh()
+      return { ok: true, message: `${typed} was already taken; saved as ${values.dv_no}.` }
+    }
+  } else {
     const row = rows.find((r) => r.sheet_row === sheetRow)
     if (!row || row.dv_no.trim() !== dvNo.trim())
       return { ok: false, message: `Row ${sheetRow} no longer holds ${dvNo.trim() || "this voucher"}. Sync and try again.` }
-    const changed = Object.fromEntries(columns.filter((c) => c.key in values && values[c.key] !== current(row, c)).map((c) => [c.key, values[c.key]]))
+    const differs = (c: Column) => (c.type === "dropdown" ? !sameChoice(values[c.key], current(row, c)) : values[c.key] !== current(row, c))
+    const changed = Object.fromEntries(columns.filter((c) => c.key in values && differs(c)).map((c) => [c.key, values[c.key]]))
     if (!Object.keys(changed).length) return { ok: true, message: `No changes to ${values.dv_no}.` }
     error = await updateVoucherCells(token, sheetRow, changed, user.email)
   }
@@ -88,7 +96,7 @@ export async function renumberVoucher(sheetRow: number, from: string, to: string
   const row = rows.find((r) => r.sheet_row === sheetRow)
   if (!row || row.dv_no.trim() !== from.trim()) return { ok: false, message: `Row ${sheetRow} no longer holds ${from}. Sync and try again.` }
   const used = rows.map((r) => r.dv_no.trim())
-  const dvNo = restore || !used.includes(to) ? to.trim() : nextDvNo(used, parseDate(row.dv_date) ?? todayManila())
+  const dvNo = restore ? to.trim() : freeDvNo(used, to, parseDate(row.dv_date) ?? todayManila())
   const failed = await setDvNo(token, sheetRow, dvNo, user.email)
   if (failed) return { ok: false, message: failed }
   refresh()

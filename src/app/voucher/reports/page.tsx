@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { NativeSelectOption } from "@/components/ui/native-select"
 import { getData } from "@/lib/data"
 import { monthLabel, months, qs, todayManila, toParams, values } from "@/lib/ledger"
-import { buildReport, clustersFor, KPI_BLOCKS, manilaTime, PERIODS, readShow, titleOf, withBlocks, type KpiBlock } from "@/lib/reports"
+import { buildReport, clustersFor, KPI_BLOCKS, manilaTime, PERIODS, readShow, reportFile, titleOf, withBlocks, type KpiBlock } from "@/lib/reports"
 import { fullName } from "@/lib/session"
 
 export const metadata: Metadata = { title: "Reports" }
@@ -87,7 +87,7 @@ export default async function Reports({ searchParams }: PageProps<"/voucher/repo
           <Button variant="outline" render={<a href={"/voucher/reports/docx/" + qs(params)} download />} nativeButton={false}>
             <FileTextIcon data-icon="inline-start" />Download Word
           </Button>
-          <PrintButton />
+          <PrintButton filename={reportFile(kind, scope)} />
           <span className="text-sm text-muted-foreground tabular-nums">{pages.length} page{pages.length === 1 ? "" : "s"}</span>
         </div>
       </Form>

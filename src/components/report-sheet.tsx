@@ -15,10 +15,10 @@ export const PAPERS = {
 } as const
 export type Paper = keyof typeof PAPERS
 
-// Fixed heights (px) the pages are packed by. A row is 28px plus 16px per extra wrapped line.
+// Fixed heights (px) the pages are packed by. A row is 29px (with its border) plus 16px per extra wrapped line.
 // ponytail: estimated, not measured; measure in the browser if pages start spilling over.
-// A register row is 12px of padding plus 16px per line of its tallest zone; its heading gets a second line too.
-const H = { pad: 96, foot: 32, start: 236, contents: 44, line: 20, carry: 50, head: 64, row: 28, wrap: 16, gap: 24, end: 150, head2: 28 }
+// A register row is 13px of padding and border plus 16px per line of its tallest zone; its heading gets a second line too.
+const H = { pad: 96, foot: 32, start: 236, contents: 44, line: 20, carry: 66, head: 64, row: 29, wrap: 16, gap: 24, end: 150, head2: 28 }
 // The KPI charts are drawn at fixed heights (px), so their share of the page is exact: highlights, tiles, trend, donuts, coverage, gaps.
 const KPI = { fact: 22, tiles: 92, trend: 196, donut: 160, coverage: 40, title: 20, gap: 20 }
 /** A KPI chart band; each one packs onto the page by itself, ahead of the indicator table's rows. */
@@ -35,7 +35,7 @@ const kpiParts = (c: Charts): [KpiPart, number][] => {
   ]
   return parts.filter(([, shown]) => shown).map(([p, , h]) => [p, h + KPI.gap])
 }
-const CHAR = 6.2 // average px per character at text-xs
+const CHAR = 7 // px per character at text-xs, allowing for the all-caps names in the sheet
 // Register zone widths (px): the left fits a full check # on one line, the right an amount and a short review.
 const ZONE = { left: 148, right: 124, gap: 24 }
 
@@ -59,8 +59,10 @@ export function layout(tables: Table[], paper: Paper, contents: boolean) {
     const mainW = 1 - (ZONE.left + ZONE.right + ZONE.gap) / textW
     const zoned = (cells: string[]) => {
       const z = t.zones!, label = labelLine(t, cells)
-      const main = z.main.reduce((n, i) => n + (cells[i] ? lines(cells[i], mainW) : 0), 0) + (label ? lines(label, mainW) : 0)
-      return 12 + H.wrap * Math.max(z.left.length, z.right.length, main)
+      const filled = z.main.filter((i) => cells[i])
+      const main = filled.reduce((n, i) => n + lines(cells[i], mainW), 0) + (label ? lines(label, mainW) : 0)
+      const gaps = 2 * Math.max(0, filled.length + (label ? 1 : 0) - 1) // the middle zone's lines sit 2px apart
+      return 13 + Math.max(H.wrap * Math.max(z.left.length, z.right.length), H.wrap * main + gaps)
     }
     const heights = [...body, ...(foot ? [foot] : [])].map((cells) => t.zones ? zoned(cells) : H.row + extra(cells, cells.map((_, i) => i)))
     // KPI chart bands go first, each its own slot, so a page takes as many as fit instead of all or none.
@@ -81,6 +83,8 @@ export function layout(tables: Table[], paper: Paper, contents: boolean) {
 
 const right = (c: Col) => (c.fmt === "text" ? "" : "text-right")
 const name = (b: Table) => (b.no ? `Schedule ${b.no}. ${b.title}` : b.title)
+// The original files, not copies resized for the screen, so a saved PDF keeps sharp logos; eager, so they're there when printing starts.
+const LOGO = { unoptimized: true, loading: "eager" } as const
 
 /** Page 1: the office letterhead, as on its printed forms, then the report's title block. */
 export function Letterhead({ title, period, area, office = "Disbursement report" }: { title: string; period: string; area: string; office?: string }) {
@@ -88,8 +92,8 @@ export function Letterhead({ title, period, area, office = "Disbursement report"
     <>
       <header className="grid grid-cols-[auto_1fr_auto] items-center gap-3 text-[#1b2a6b]">
         <div className="flex items-center gap-1.5">
-          <Image src="/bagong_pilipinas_logo.png" alt="Bagong Pilipinas" width={86} height={80} className="h-20 w-auto" />
-          <Image src="/tesda_logo.png" alt="TESDA" width={80} height={80} className="size-20" />
+          <Image {...LOGO} src="/bagong_pilipinas_logo.png" alt="Bagong Pilipinas" width={86} height={80} className="h-20 w-auto" />
+          <Image {...LOGO} src="/tesda_logo.png" alt="TESDA" width={80} height={80} className="size-20" />
         </div>
         <div className="text-center leading-tight">
           <div className="text-[15px]">Technical Education and Skills Development Authority XI</div>
@@ -97,7 +101,7 @@ export function Letterhead({ title, period, area, office = "Disbursement report"
           <div className="text-[15px] font-bold">VOCATIONAL TRAINING CENTER</div>
           <div className="text-[15px]">Buhisan Tibungco, Davao City, Philippines</div>
         </div>
-        <Image src="/tesda_korphil_logo.png" alt="Korea-Philippines Vocational Training Center" width={80} height={80} className="size-20" />
+        <Image {...LOGO} src="/tesda_korphil_logo.png" alt="Korea-Philippines Vocational Training Center" width={80} height={80} className="size-20" />
       </header>
       <div className="flex flex-col items-center gap-0.5 border-y-2 border-double border-foreground/70 py-2 text-center">
         <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Accounting Office · {office}</p>
@@ -109,11 +113,16 @@ export function Letterhead({ title, period, area, office = "Disbursement report"
   )
 }
 
-/** Later pages: one line naming the office, report and period. */
+/** Later pages: the three logos, small (page 1 names them), then one line naming the office, report and period. */
 export function RunningHeader({ title, period, area }: { title: string; period: string; area: string }) {
   return (
-    <header className="flex justify-between gap-4 border-b pb-2 text-xs text-muted-foreground">
-      <strong className="text-foreground">RTC – KorPhil VTC · {title}</strong>
+    <header className="flex items-center justify-between gap-4 border-b pb-2 text-xs text-muted-foreground">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <Image {...LOGO} src="/bagong_pilipinas_logo.png" alt="" width={34} height={32} className="h-8 w-auto" />
+        <Image {...LOGO} src="/tesda_logo.png" alt="" width={32} height={32} className="size-8" />
+        <Image {...LOGO} src="/tesda_korphil_logo.png" alt="" width={32} height={32} className="size-8" />
+        <strong className="ml-1 text-foreground">RTC – KorPhil VTC · {title}</strong>
+      </div>
       <span>{period} · {area}</span>
     </header>
   )
