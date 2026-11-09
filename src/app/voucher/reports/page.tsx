@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { NativeSelectOption } from "@/components/ui/native-select"
 import { getData } from "@/lib/data"
 import { monthLabel, months, qs, todayManila, toParams, values } from "@/lib/ledger"
-import { buildReport, clustersFor, KPI_BLOCKS, manilaTime, PERIODS, readShow, reportFile, titleOf, withBlocks, type KpiBlock } from "@/lib/reports"
+import { buildReport, clustersFor, KPI_BLOCKS, PERIODS, readShow, reportFile, titleOf, withBlocks, type KpiBlock } from "@/lib/reports"
 import { fullName } from "@/lib/session"
 
 export const metadata: Metadata = { title: "Reports" }
@@ -88,7 +88,6 @@ export default async function Reports({ searchParams }: PageProps<"/voucher/repo
             <FileTextIcon data-icon="inline-start" />Download Word
           </Button>
           <PrintButton filename={reportFile(kind, scope)} />
-          <span className="text-sm text-muted-foreground tabular-nums">{pages.length} page{pages.length === 1 ? "" : "s"}</span>
         </div>
       </Form>
 
@@ -119,10 +118,10 @@ export default async function Reports({ searchParams }: PageProps<"/voucher/repo
                   <Letterhead {...head} />
                   {empty && <p className="py-4 text-center text-muted-foreground">No vouchers match these choices. Widen the period or trade area above; the basis of preparation below shows what was left out.</p>}
                   {summary && !empty && <Contents blocks={blocks} startsOn={startsOn} />}
-                </> : <RunningHeader {...head} />}
-                {chunks.map(({ block, from, to }) => <Schedule key={`${block}-${from}`} b={blocks[block]} from={from} to={to} cluster={summary} />)}
+                </> : <RunningHeader title={head.title} />}
+                {chunks.map(({ block, from, to }) => <Schedule key={`${block}-${from}`} b={blocks[block]} from={from} to={to} />)}
                 {last && !empty && <SignOff preparer={fullName(user)} />}
-                <PageFooter source={pull.title} generated={manilaTime(generated)} page={pi + 1} of={pages.length} push={!last || empty} />
+                <PageFooter page={pi + 1} of={pages.length} push={!last || empty} />
               </article>
             )
           })}

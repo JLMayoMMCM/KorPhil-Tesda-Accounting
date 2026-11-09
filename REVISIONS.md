@@ -224,3 +224,93 @@ Net: about -730 lines, -0 deps (`shadcn`, `server-only` and `cn` are all used: `
 - [ ] **Lists vs cell rules:** columns J and K only allow values from `O4:O45` and `P5:P38` (strict), but the form offers the Selection List. `(BLANK)`, `CENTER ADMINISTRATION`, `ELECTRECITY` and the list's own header in J, and `(BLANK)` in K, aren't in those ranges, so Google may refuse them. Status spells its options in capitals in the Selection List but "For Review" / "Verified" in column L's rule. Align them in the sheet.
 - [ ] **DV # rule:** confirm the format with accounting (see the note at `DV_FORMAT`). A mistyped high number pushes every later number up, since the sequence follows the year's highest.
 - [ ] **Several server instances:** each keeps its own cache, so Sync on one doesn't update another at once. If that shows up on Vercel, move to `unstable_cache` with `revalidateTag`.
+
+## R9 · Collection: no deposits, CRUD, one sheet engine · planned 2026-11-09
+
+**Goal:** the app stops knowing about Deposit / Undeposited Collection (the sheet keeps them), collections get New / Edit / Delete like vouchers, and both modules run on one sheet engine with no fixed column lists or table headers.
+
+### What's there now
+
+- **Deposit** is still a field (`COLLECTION_HEADERS.deposit`, `COLLECTION_LABELS.deposit`), read only so `readCollections` can drop deposit rows; tests at `ledger.test.ts:236-257`; the report note in `collection-reports.ts:163`. Undeposited is never read.
+- **Collection is read-only and runs on its own path:** `readCollections` + `Layout<CollectionField>` (no `Column[]`, types, visibility or extras) and a separate `collectionPull` cache. Disbursement runs on `readSheet` → `SheetModel` → `writeCells` / `appendVoucher` / `VoucherPanel`.
+- **Fixed things found:**
+  1. `COLLECTION.lastCol: 8`: the ledger must be A:I; inserting a column pushes the last one out of reach.
+  2. `sheets.ts` writes are bound to `SHEET_ID`, `TAB`, the one `state()` cache, `dv_no` as the row's identity and `RAW_KEYS` by name.
+  3. `readSheet`, `classifyRow`, `TYPE_OVERRIDES`, `LIST_ORDER`, `fixedLayout` and `HEADERS` only know disbursement fields.
+  4. Settings metadata keys (`korphil.layout`, `korphil.column`, …) aren't per module: when `COLLECTION_SHEET_ID` is the same spreadsheet, the spreadsheet-level `korphil.layout` tag is shared.
+  5. `headerSig` is the whole header row; on Collection that includes the summary tables (J+), whose monthly titles change, so every write would be refused.
+  6. Collections list (`collections/page.tsx`) and the cash receipts register (`collection-reports.ts:136`) hard-code their columns; added sheet columns never show. The vouchers list already shows extras.
+  7. Collection settings is a read-only field table; vouchers have the role/type/visibility editor (`layout-editor.tsx`).
+
+### Phase 1 · Drop deposits (small, ships alone) · done 2026-11-09
+
+- [x] Remove `deposit` from `COLLECTION_HEADERS` and `COLLECTION_LABELS`; Deposit and Undeposited become unknown columns (extras once Phase 2 lands), never written.
+- [x] Row rule without the Deposit column: a row with no Collection amount **and no OR #** is dropped quietly (deposit lines, blanks); one with an OR # but no amount is still listed under "Rows not read", so a real receipt gap stays visible.
+- [x] Update the tests (deposit rows still drop out, now without a Deposit column) and the report source note.
+
+### Phase 2 · One sheet engine (modularity) · done 2026-11-09
+
+- [x] **A `Book` per module** (`sheet-config.ts`): headers, required fields, bound, env overrides, input types, positional lists, RAW keys, row classifier, optional start rule and fixed fallback. `DISBURSEMENT` lives in `sheet-config.ts`, `COLLECTION` in `collection.ts`; the engine names no module's fields.
+- [x] `readSheet(values, { book, saved, lists, fixed })` gives either module a `SheetModel` with `Column[]` (types, options, visibility, extras). `SheetModel.vouchers` is now `rows`; a book with no fixed fallback reads `source: "none"` with the detection error. `readCollections` is `readSheet` + `entriesFrom`; the deposit rule is the collection book's `classify`.
+- [x] **No `lastCol`, but not "first blank header" either:** on the live tab, Deposit, Undeposited and the monthly summary columns (J:L) sit right beside the ledger with no gap. So a book has a `bound`: vouchers read the whole header row (as before); collections end at the last column with a role (A:G today). A column inserted inside the ledger is read as an extra; a column past it is taken in by giving it a role in Settings ("No role" counts).
+- [x] `headerSig` covers only the mapped columns, so renaming a summary header doesn't block writes; moving a ledger column still does.
+- [x] `sheets.ts`: one cache per book (`fetchRows(name)`, `lastPull(name)`), `writeCells(name, …)`, `updateCells(name, …)`, `appendRow(name, …)`, `saveSettings(…, name)`. The voucher wrappers keep their names. Before a write, the target row's mapped cells must match the pull (was: the DV # only); the message names the column that changed. Each spreadsheet's own Selection List feeds its book.
+- [x] Metadata keys per book: `korphil.collection.*` for collections; vouchers keep `korphil.*`, so saved settings survive.
+- [x] Checks: `tsc`, `eslint`, `node --test` (new: the bound, an inserted column, header-sig vs summary headers, a role taking in Deposit, per-book keys) and `next build` pass. Live, read-only: vouchers read the same 642 rows and columns as before; collections the same 246 entries and ₱11,266,222.59.
+
+**Found on the live tab:** row 127 is an LDDAP deposit line that also carries OR # 104300 (the next row's number). The old Deposit rule dropped it silently; it now shows under Rows not read ("No amount"). It isn't counted either way. Clear the OR # in the sheet if it's a slip.
+
+### Phase 3 · Collection CRUD · done 2026-11-09
+
+- [x] **`RecordPanel`** (`record-panel.tsx`): the side-panel form for any book, built from `Column[]`. It takes `save` / `remove` as bound server actions, plus `required`, `wide`, and two client hooks: `input` for a custom input, `onField` to keep fields in step. `VoucherPanel` is now a thin wrapper that adds the DV # following its date and the Status select. Nothing in the shared form names a field.
+- [x] Shared helpers in `ledger.ts`: `formFromRow` (both lists use it) and `rowSig` (what a row held when the form opened). `clean` in `actions.ts` is generic: required keys, money that must parse, dates that must read as dates. `saveVoucher` now takes `(row, dvNo, form)` so it can be bound.
+- [x] **`saveEntry(row | null, sig, form)`**: re-pulls the tab; an edit's row must still match `sig`; only changed cells are written; a new entry goes into the first empty row after the last one. An OR # already used elsewhere is saved, and the message names the other row.
+- [x] **`deleteEntry(row, sig)`**: clears the row's shown ledger cells (A:G today). The row stays, and so do Deposit, Undeposited and the summary tables beside it. Every cleared cell is logged with its old value.
+- [x] Collections list: rows open the panel (`?open=`), **New collection** in the header (`N`, `?new=1`), Delete in the panel behind a confirm. Secondary columns hide while the panel is open, as on vouchers.
+- [x] Collection text fields (OR #, payor, UACS, area, nature) are written RAW, so typed text is never read as a formula. Date and amount are validated, then written USER_ENTERED.
+- [x] `tsc`, `eslint`, `node --test` (new: form values, row signature) and `next build` pass.
+
+**Not checked:** saving, editing and deleting in the browser need a signed-in Editor. The dev server's pane stopped at Google sign-in.
+
+### Phase 4 · No fixed tables or headers in the UI · done 2026-11-09
+
+- [x] Each collection `Entry` carries its extra columns (`extra`, by column key). The Collections list keeps its stacked pairs (Date · OR #, Payor · nature, UACS · area) and adds one column per extra, as the vouchers list does. Extras hide while the panel is open.
+- [x] **Cash receipts register** is built from the tab's columns: labels are the sheet's own headers and hidden columns are left out. Known fields go in their zones (date and OR # on the left, payor and nature in the middle, UACS and area as tags, the amount on the right) and extras print by name. The CSV and Word exports follow, since they share `buildCollectionReport`.
+- [x] **Collection Settings** has the same Layout settings editor as vouchers: header row, ignored rows, and each column's role, input and visibility. They're saved under the collection's own metadata keys. `LayoutEditor` takes the book and its field labels; `layoutAction` checks the book name and uses that book's fields and required roles.
+- [x] **Amount search:** both search boxes (vouchers in the header, collections on the list) also match amounts: `12,500` exactly, `>5000`, `>=5000`, `<1000`, `<=1000`, or a range `1000-5000` / `1000 to 5000`. Text matches still count, so an OR # like 104189 finds the receipt either way (`amountQuery` in `ledger.ts`, tested).
+- [x] `tsc`, `eslint`, `node --test` (new: extras ride on each entry) and `next build` pass.
+
+**Not checked:** the Settings editor and the list's extra columns in the browser (Google sign-in). With the live tab as it is, there are no extras, so the list and register look as before.
+
+### Roles and options from the Selection List · done 2026-11-09
+
+- [x] **Roles come from the sheet:** Layout settings offers the names in the Selection List's **DVROLES** (E) or **COLLECTION ROLES** (I) column, spelled as the sheet spells them (`bookRoles`). Names are matched to app fields by header text. Settings lists any name the app can't match, and any field the table leaves out. Required fields are always offered. Without a roles column, every field is offered.
+- [x] **One column per role:** a role picked on one column is greyed out on the others. A column whose Auto role is picked elsewhere drops to "Auto (no role found)". Saving the same role on two columns is refused, and the message names both columns.
+- [x] **No "No role" option:** Auto covers it. A column with no role is hidden by default everywhere (forms, lists, register); setting its Show to Shown or Read-only brings it in. That also extends the collection ledger past its last known column. Old saved "No role" settings read as Auto, set to Shown.
+- [x] **Dropdown options by role:** a column's choices come from the Selection List column headed with its role's name, then its own header, then any alias. Collection Area gets G (COLLECTION AREA), not A (TRADE AREA). A column with an options table is a dropdown, which makes Nature of collection one (H). The role columns are never used as options.
+- [x] `tsc`, `eslint`, `node --test` (new: roles from the tables, options by role, role tables excluded) and `next build` pass. Live, read-only: all 10 DV roles and all 7 collection roles match. Dropdowns: trade area 18, diploma/ST 37, category 21, status 4; UACS 6, collection area 18, nature 9. 642 vouchers and 246 entries, as before.
+
+**Not checked:** the editor and forms in the browser (Google sign-in). Option lists still include the sheet's own `(BLANK)` and `TEST2` values.
+
+### Custom roles from the roles columns · done 2026-11-09
+
+**Audit:** CATEGORY gained "MEDICAL" and the app already read it; the dropdown shows 21 choices because the column lists two values twice. Seeing it can take up to a minute of cache, or a Sync. COLLECTION ROLES gained "Deposit", and the app dropped it as "not a role the app knows".
+
+- [x] **Custom roles:** any name in DVROLES or COLLECTION ROLES that isn't a field the app knows is a role too, keyed `x:<name>` and offered under the sheet's spelling (`bookRoles().custom`). Auto places it on the first free column whose header is that name, or Settings places it by hand (one column per role still holds). A column with a custom role is read as a named, shown column: in the form, list, register and exports, with options from a Selection List column of the same name if there is one. On the collection tab it extends the ledger.
+- [x] A column empty on every ledger row has its type guessed from the rest of the column. Deposit's amounts sit on deposit lines, so it now reads as money.
+- [x] Live, read-only: COLLECTION ROLES gives 8 roles with Deposit as the custom one. Columns are A:G plus Deposit (H, money, shown); Undeposited and the summary tables stay out. Still 246 entries and ₱11,266,222.59.
+- [x] `tsc`, `eslint`, `node --test` (new: a custom role found by header, read past the last known column, placed by hand; not read when the roles column doesn't list it) and `next build` pass.
+
+**Note:** deposit lines still aren't entries, so the Collections list's Deposit column is blank on every receipt today. It fills in once Deposit is entered on a receipt's own row.
+
+### Checks
+
+- [ ] `tsc`, `eslint`, `node --test`, `next build`.
+- [ ] Tests: deposit rows drop without a Deposit column; an inserted column inside the ledger is read and one after the gap isn't; header-sig ignores J+; a write refused when the target row changed.
+- [ ] Live: entry count and total match before and after Phase 1 (deposit rows were already excluded, so they must not change); a signed-in Editor runs New / Edit / Delete on a test row.
+
+### Open questions
+
+- **Delete:** clear the cells (planned) or remove the row? Removing shifts every row below and can break the Undeposited running-total formula.
+- **New rows and formulas:** a new entry goes into the first empty row after the last one; if Undeposited is a formula per row, it won't be filled for that row. Fine, or should the app copy the formula down?
+- **Delete for vouchers too?** Disbursement has no delete today; Phase 3 makes it a small addition.

@@ -3,6 +3,8 @@ import type { Metadata } from "next"
 import Form from "next/form"
 import Link from "next/link"
 
+import { RecordPanel } from "@/components/record-panel"
+import { LinkRow } from "@/components/selection"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
@@ -11,9 +13,11 @@ import { Input } from "@/components/ui/input"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { account, collected, ENTRY_ISSUES, entryMonths, filterEntries, tags, type EntryIssue } from "@/lib/collection"
-import { getCollectionData } from "@/lib/data"
-import { longDate, monthLabel, peso, qs, toParams } from "@/lib/ledger"
+import { deleteEntry, saveEntry } from "@/app/actions"
+import { account, COLLECTION, collected, ENTRY_ISSUES, entryMonths, filterEntries, tags, type EntryIssue } from "@/lib/collection"
+import { clock, getCollectionData } from "@/lib/data"
+import { formFromRow, longDate, monthLabel, peso, qs, rowSig, toParams } from "@/lib/ledger"
+import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = { title: "Collections · Collections" }
 
@@ -21,16 +25,27 @@ const VIEWS = { "": "All", review: "Needs review" } as const
 const PER = 100
 const BASE = "/collection/collections/"
 
-/** Every receipt on the Collection tab, newest first, with the same filters the dashboard links to. */
+/** Every receipt on the Collection tab, newest first, with the same filters the dashboard links to. A row opens in the side panel to edit or delete; ?new opens a blank one. */
 export default async function Collections({ searchParams }: PageProps<"/collection/collections">) {
   const params = toParams(await searchParams)
-  const { entries } = await getCollectionData()
+  const { entries, rows, columns, title, at, today } = await getCollectionData()
   // "Needs review": receipts with any flag.
   const view = params.get("issue") === "any" ? "review" : ""
   const shown = filterEntries(entries, params)
   const pages = Math.max(1, Math.ceil(shown.length / PER))
   const page = Math.min(pages, Math.max(1, Math.floor(Number(params.get("page"))) || 1))
   const pageRows = shown.slice((page - 1) * PER, page * PER)
+
+  const panelEntry = entries.find((e) => String(e.sheet_row) === params.get("open")) ?? null
+  const panelRow = (panelEntry && rows.find((r) => r.sheet_row === panelEntry.sheet_row)) ?? null
+  const isNew = !panelRow && params.has("new") && columns.length > 0
+  const panel = !!panelRow || isNew
+  const closeUrl = BASE + qs(params, { open: null, new: null })
+  const sig = panelRow ? rowSig(panelRow, columns) : ""
+  // Secondary columns: md+ only, and hidden while the panel is open (a bare "hidden" loses to md:table-cell).
+  const wide = panel ? "hidden" : "hidden md:table-cell"
+  // Columns added to the sheet beyond the known fields, one table column each, in sheet order.
+  const extras = columns.filter((c) => !c.field && c.visibility !== "hidden")
 
   const area = params.get("area"), uacs = params.get("uacs"), month = params.get("month"), year = params.get("year"), issue = params.get("issue"), q = params.get("q")
   const chips: [string, string][] = []
@@ -45,10 +60,11 @@ export default async function Collections({ searchParams }: PageProps<"/collecti
     : <Button variant="outline" size="sm" render={<Link href={BASE + qs(params, { page: String(to) })} />} nativeButton={false}>{text}</Button>
 
   return (
+    <div className={cn("grid items-start gap-4", panel && "lg:grid-cols-[minmax(0,1fr)_22rem] xl:grid-cols-[minmax(0,1fr)_26rem]")}>
     <section className="flex min-w-0 flex-col gap-3">
       <nav aria-label="Collection views" className="flex flex-wrap items-center gap-1 border-b pb-2">
         {(Object.entries(VIEWS) as [keyof typeof VIEWS, string][]).map(([key, name]) => {
-          const changes = key === "review" ? { issue: "any" } : { issue: view === "review" ? null : issue }
+          const changes = { ...(key === "review" ? { issue: "any" } : { issue: view === "review" ? null : issue }), open: null, new: null }
           return (
             <Button key={key} size="sm" variant={key === view ? "secondary" : "ghost"} aria-current={key === view ? "page" : undefined}
               render={<Link href={BASE + qs(params, { ...changes, page: null })} />} nativeButton={false}>
@@ -58,7 +74,7 @@ export default async function Collections({ searchParams }: PageProps<"/collecti
         })}
         <Form action={BASE} role="search" className="ml-auto flex items-center gap-2">
           {[...params].filter(([k]) => k !== "q" && k !== "page").map(([k, v]) => <input key={k + v} type="hidden" name={k} value={v} />)}
-          <Input type="search" name="q" defaultValue={q ?? ""} placeholder="Find OR #, payor, nature" aria-label="Find entries" className="h-8 w-56" />
+          <Input type="search" name="q" defaultValue={q ?? ""} placeholder="Find OR #, payor, or amount (>5000)" aria-label="Find entries by OR #, payor, nature, or amount" className="h-8 w-64" />
         </Form>
         <Popover>
           <PopoverTrigger render={<Button variant="outline" size="sm" />}>
@@ -114,15 +130,19 @@ export default async function Collections({ searchParams }: PageProps<"/collecti
               <TableRow>
                 <TableHead>Date · OR #</TableHead>
                 <TableHead className="w-full">Payor · nature</TableHead>
-                <TableHead className="hidden md:table-cell">UACS · area</TableHead>
+                <TableHead className={wide}>UACS · area</TableHead>
+                {extras.map((c) => <TableHead key={c.key} className={cn(wide, c.type === "money" && "text-right")}>{c.label}</TableHead>)}
                 <TableHead className="text-right">Collection</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {pageRows.map((e) => (
-                <TableRow key={e.sheet_row}>
+              {pageRows.map((e) => {
+                const openUrl = BASE + qs(params, { open: String(e.sheet_row), new: null })
+                return (
+                <LinkRow key={e.sheet_row} href={openUrl} data-state={panelEntry?.sheet_row === e.sheet_row ? "selected" : undefined}>
                   <TableCell className="align-top whitespace-nowrap">
-                    <div>{longDate(e.iso)}</div>
+                    {/* No prefetch: a page of rows would be a page of requests. */}
+                    <Link className="hover:underline" href={openUrl} scroll={false} prefetch={false}>{longDate(e.iso)}</Link>
                     <div className="text-xs text-muted-foreground tabular-nums">{e.or_no || "No OR #"} · row {e.sheet_row}</div>
                   </TableCell>
                   <TableCell className="align-top whitespace-normal">
@@ -134,19 +154,25 @@ export default async function Collections({ searchParams }: PageProps<"/collecti
                       </div>
                     )}
                   </TableCell>
-                  <TableCell className="hidden align-top whitespace-normal md:table-cell">
+                  <TableCell className={cn("align-top whitespace-normal", wide)}>
                     <div className="tabular-nums">{e.uacs.match(/^\s*(\d{6,})/)?.[1] ?? (e.uacs ? account(e.uacs) : "—")}</div>
                     {/^\s*\d{6,}/.test(e.uacs) && <div className="text-xs text-muted-foreground">{account(e.uacs)}</div>}
                     <div className="text-xs text-muted-foreground">{e.area}</div>
                   </TableCell>
+                  {extras.map((c) => (
+                    <TableCell key={c.key} className={cn("max-w-40 align-top", wide, c.type === "money" && "text-right tabular-nums")}>
+                      <div className="truncate" title={e.extra[c.key]}>{e.extra[c.key] || "—"}</div>
+                    </TableCell>
+                  ))}
                   <TableCell className="text-right align-top tabular-nums">{peso(e.collected)}</TableCell>
-                </TableRow>
-              ))}
+                </LinkRow>
+                )
+              })}
             </TableBody>
             <TableFooter>
               <TableRow>
                 <TableCell colSpan={2} className="font-medium">Total, {shown.length} receipts</TableCell>
-                <TableCell className="hidden md:table-cell" />
+                <TableCell colSpan={1 + extras.length} className={wide} />
                 <TableCell className="text-right font-medium tabular-nums">{peso(collected(shown))}</TableCell>
               </TableRow>
             </TableFooter>
@@ -169,5 +195,28 @@ export default async function Collections({ searchParams }: PageProps<"/collecti
         </Empty>
       )}
     </section>
+
+    {panel && (
+      <RecordPanel
+        key={panelRow ? `${panelRow.sheet_row}:${sig}` : "new"}
+        row={panelRow?.sheet_row ?? null}
+        initial={formFromRow(panelRow, columns, { date: today })}
+        columns={columns}
+        heading={isNew ? "New collection" : panelEntry!.or_no ? `OR # ${panelEntry!.or_no}` : `Row ${panelEntry!.sheet_row}`}
+        status={panelEntry ? (
+          panelEntry.issues.length ? (
+            <span className="flex flex-wrap gap-1">{panelEntry.issues.map((i) => <Badge key={i} variant="destructive">{ENTRY_ISSUES[i]}</Badge>)}</span>
+          ) : `${peso(panelEntry.collected)} collected ${longDate(panelEntry.iso)}`
+        ) : "Adds a row after the last entry in the sheet."}
+        source={panelRow ? `Source: ${title || "Google Sheet"} · row ${panelRow.sheet_row} · pulled ${clock(at)}` : ""}
+        closeUrl={closeUrl}
+        save={saveEntry.bind(null, panelRow?.sheet_row ?? null, sig)}
+        remove={panelRow ? deleteEntry.bind(null, panelRow.sheet_row, sig) : undefined}
+        removeNote={panelRow ? `Clears this entry's cells in row ${panelRow.sheet_row}. The row stays, and so do Deposit, Undeposited and the summary tables beside it. Undo from the sheet's version history.` : undefined}
+        required={COLLECTION.required}
+        wide={["payor"]}
+      />
+    )}
+    </div>
   )
 }

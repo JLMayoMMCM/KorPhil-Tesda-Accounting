@@ -12,7 +12,7 @@ import { entryMonths, tags } from "@/lib/collection"
 import { buildCollectionReport, COLLECTION_CLUSTERS, collectionTitle } from "@/lib/collection-reports"
 import { getCollectionData } from "@/lib/data"
 import { monthLabel, qs, toParams } from "@/lib/ledger"
-import { manilaTime, PERIODS, reportFile } from "@/lib/reports"
+import { PERIODS, reportFile } from "@/lib/reports"
 import { fullName } from "@/lib/session"
 
 export const metadata: Metadata = { title: "Reports · Collections" }
@@ -20,9 +20,9 @@ export const metadata: Metadata = { title: "Reports · Collections" }
 /** The collection reports, printed on the same report sheet as the disbursement reports. */
 export default async function CollectionReports({ searchParams }: PageProps<"/collection/reports">) {
   const params = toParams(await searchParams)
-  const { entries, skipped, title, at, user, today } = await getCollectionData()
+  const { entries, skipped, title, at, user, today, columns } = await getCollectionData()
   const generated = new Date()
-  const { kind, scope, area, tables } = buildCollectionReport(entries, params, today, { source: title, pulled: at, generated, by: fullName(user) }, skipped.length)
+  const { kind, scope, area, tables } = buildCollectionReport(entries, params, today, { source: title, pulled: at, generated, by: fullName(user) }, skipped.length, columns)
   const paper: Paper = (params.get("paper") ?? "") in PAPERS ? (params.get("paper") as Paper) : "short"
   const [, paperW, paperH] = PAPERS[paper]
   const summary = kind === "summary"
@@ -71,7 +71,6 @@ export default async function CollectionReports({ searchParams }: PageProps<"/co
             <FileTextIcon data-icon="inline-start" />Download Word
           </Button>
           <PrintButton filename={`collections-${reportFile(kind, scope)}`} />
-          <span className="text-sm text-muted-foreground tabular-nums">{pages.length} page{pages.length === 1 ? "" : "s"}</span>
         </div>
       </Form>
 
@@ -99,13 +98,13 @@ export default async function CollectionReports({ searchParams }: PageProps<"/co
               <article key={pi} aria-label={`Page ${pi + 1}`} style={{ width: paperW, minHeight: `calc(${paperH} - 1px)` }}
                 className="mx-auto flex shrink-0 flex-col gap-6 bg-card p-[0.5in] text-card-foreground shadow-md ring-1 ring-foreground/10 break-after-page last:break-after-auto print:m-0 print:shadow-none print:ring-0">
                 {pi === 0 ? <>
-                  <Letterhead {...head} office="Collection report" />
+                  <Letterhead {...head} />
                   {empty && <p className="py-4 text-center text-muted-foreground">No entries match these choices. Widen the period or area above; the basis of preparation below shows what was left out.</p>}
                   {summary && !empty && <Contents blocks={blocks} startsOn={startsOn} />}
-                </> : <RunningHeader {...head} />}
-                {chunks.map(({ block, from, to }) => <Schedule key={`${block}-${from}`} b={blocks[block]} from={from} to={to} cluster={summary} />)}
+                </> : <RunningHeader title={head.title} />}
+                {chunks.map(({ block, from, to }) => <Schedule key={`${block}-${from}`} b={blocks[block]} from={from} to={to} />)}
                 {last && !empty && <SignOff preparer={fullName(user)} />}
-                <PageFooter source={title} generated={manilaTime(generated)} page={pi + 1} of={pages.length} push={!last || empty} />
+                <PageFooter page={pi + 1} of={pages.length} push={!last || empty} />
               </article>
             )
           })}

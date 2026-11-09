@@ -18,9 +18,9 @@ export type Paper = keyof typeof PAPERS
 // Fixed heights (px) the pages are packed by. A row is 29px (with its border) plus 16px per extra wrapped line.
 // ponytail: estimated, not measured; measure in the browser if pages start spilling over.
 // A register row is 13px of padding and border plus 16px per line of its tallest zone; its heading gets a second line too.
-const H = { pad: 96, foot: 32, start: 236, contents: 44, line: 20, carry: 66, head: 64, row: 29, wrap: 16, gap: 24, end: 150, head2: 28 }
+const H = { pad: 96, foot: 32, start: 204, contents: 44, line: 20, carry: 66, head: 64, row: 29, wrap: 16, gap: 24, end: 150, head2: 28 }
 // The KPI charts are drawn at fixed heights (px), so their share of the page is exact: highlights, tiles, trend, donuts, coverage, gaps.
-const KPI = { fact: 22, tiles: 92, trend: 196, donut: 160, coverage: 40, title: 20, gap: 20 }
+const KPI = { fact: 22, tiles: 60, trend: 196, donut: 160, coverage: 40, title: 20, gap: 20 }
 /** A KPI chart band; each one packs onto the page by itself, ahead of the indicator table's rows. */
 type KpiPart = "highlights" | "tiles" | "trend" | "donuts" | "coverage"
 /** The shown bands, in page order, with their heights (each followed by a gap). */
@@ -69,9 +69,6 @@ export function layout(tables: Table[], paper: Paper, contents: boolean) {
     const parts = t.charts ? kpiParts(t.charts) : []
     heights.unshift(...parts.map(([, h]) => h))
     if (t.charts && !heights.length) heights.push(0) // every part hidden: the title and basis still need a place
-    // The basis line rides with the first slot and the notes with the last, so neither is stranded on its own page.
-    if (heights.length && t.basis) heights[0] += H.wrap * lines(t.basis)
-    if (heights.length) heights[heights.length - 1] += t.notes.reduce((s, n) => s + 4 + H.wrap * lines(n), 0)
     return { ...t, body, foot, heights, lead: parts.map(([p]) => p) }
   })
   const clusters = new Set(blocks.flatMap((b) => b.cluster ?? [])).size
@@ -86,8 +83,8 @@ const name = (b: Table) => (b.no ? `Schedule ${b.no}. ${b.title}` : b.title)
 // The original files, not copies resized for the screen, so a saved PDF keeps sharp logos; eager, so they're there when printing starts.
 const LOGO = { unoptimized: true, loading: "eager" } as const
 
-/** Page 1: the office letterhead, as on its printed forms, then the report's title block. */
-export function Letterhead({ title, period, area, office = "Disbursement report" }: { title: string; period: string; area: string; office?: string }) {
+/** Page 1: the office letterhead, as on its printed forms, then the report's title and scope. */
+export function Letterhead({ title, period, area }: { title: string; period: string; area: string }) {
   return (
     <>
       <header className="grid grid-cols-[auto_1fr_auto] items-center gap-3 text-[#1b2a6b]">
@@ -104,26 +101,23 @@ export function Letterhead({ title, period, area, office = "Disbursement report"
         <Image {...LOGO} src="/tesda_korphil_logo.png" alt="Korea-Philippines Vocational Training Center" width={80} height={80} className="size-20" />
       </header>
       <div className="flex flex-col items-center gap-0.5 border-y-2 border-double border-foreground/70 py-2 text-center">
-        <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Accounting Office · {office}</p>
         <h2 className="font-heading text-lg font-bold tracking-tight text-balance">{title}</h2>
-        <p className="text-sm">{period}</p>
-        <p className="text-xs text-muted-foreground">{area} · Amounts in Philippine pesos (₱)</p>
+        <p className="text-sm">{period} · {area}</p>
       </div>
     </>
   )
 }
 
-/** Later pages: the three logos, small (page 1 names them), then one line naming the office, report and period. */
-export function RunningHeader({ title, period, area }: { title: string; period: string; area: string }) {
+/** Later pages: the three logos, small (page 1 names them), then the office and report. */
+export function RunningHeader({ title }: { title: string }) {
   return (
-    <header className="flex items-center justify-between gap-4 border-b pb-2 text-xs text-muted-foreground">
+    <header className="flex items-center gap-4 border-b pb-2 text-xs">
       <div className="flex min-w-0 items-center gap-1.5">
         <Image {...LOGO} src="/bagong_pilipinas_logo.png" alt="" width={34} height={32} className="h-8 w-auto" />
         <Image {...LOGO} src="/tesda_logo.png" alt="" width={32} height={32} className="size-8" />
         <Image {...LOGO} src="/tesda_korphil_logo.png" alt="" width={32} height={32} className="size-8" />
-        <strong className="ml-1 text-foreground">RTC – KorPhil VTC · {title}</strong>
+        <strong className="ml-1">RTC – KorPhil VTC · {title}</strong>
       </div>
-      <span>{period} · {area}</span>
     </header>
   )
 }
@@ -187,20 +181,14 @@ function Zones({ b, cells, head = false, total = false }: { b: Block; cells: str
   )
 }
 
-/** Rows [from, to) of one schedule: title (and cluster in the full report), basis, table, total row, notes. */
-export function Schedule({ b, from, to, cluster }: { b: Block; from: number; to: number; cluster: boolean }) {
+/** Rows [from, to) of one schedule: title, table, total row. */
+export function Schedule({ b, from, to }: { b: Block; from: number; to: number }) {
   // Slots [from, to) cover KPI chart bands first (b.lead), then table rows.
   const parts = b.lead.slice(from, to), rf = Math.max(0, from - b.lead.length), rt = Math.max(0, to - b.lead.length)
   const foot = b.foot && rt > b.body.length
   return (
     <section className="flex flex-col gap-2">
-      <div className="flex flex-col gap-0.5">
-        <h3 className="flex items-baseline justify-between gap-4 font-heading text-sm font-bold">
-          <span>{name(b)}{from > 0 && <span className="font-normal text-muted-foreground"> (continued)</span>}</span>
-          {cluster && <span className="text-xs font-normal text-muted-foreground">{b.cluster}</span>}
-        </h3>
-        {from === 0 && b.basis && <p className="text-xs text-muted-foreground">{b.basis}</p>}
-      </div>
+      <h3 className="font-heading text-sm font-bold">{name(b)}{from > 0 && <span className="font-normal"> (continued)</span>}</h3>
       {b.charts && parts.length > 0 && <KpiCharts c={b.charts} parts={parts} />}
       {rt <= rf && !foot ? null : b.zones ? (
         <T className="table-fixed border-y border-foreground/70 text-xs">
@@ -250,11 +238,6 @@ export function Schedule({ b, from, to, cluster }: { b: Block; from: number; to:
             </TableFooter>
           )}
         </T>
-      )}
-      {to === b.heights.length && b.notes.length > 0 && (
-        <ol className="flex flex-col gap-1 text-xs text-muted-foreground">
-          {b.notes.map((n, i) => <li key={i}>{b.notes.length > 1 ? `Note ${i + 1}. ` : "Note. "}{n}</li>)}
-        </ol>
       )}
     </section>
   )
@@ -395,12 +378,9 @@ function KpiCharts({ c, parts }: { c: Charts; parts: KpiPart[] }) {
       {here("tiles") && (
         <dl className="grid grid-cols-4 divide-x border-y border-foreground/20" style={{ height: KPI.tiles }}>
           {c.tiles.map((t) => (
-            // Top-aligned, so every tile's figure sits on the same line whether it carries one note or two.
-            <div key={t.label} className="flex min-w-0 flex-col gap-0.5 px-3 pt-2.5 first:pl-0">
+            <div key={t.label} className="flex min-w-0 flex-col justify-center gap-0.5 px-3 first:pl-0">
               <dt className="text-xs text-muted-foreground">{t.label.replace(/ \(.*\)$/, "")}</dt>
               <dd className="text-base font-semibold">{t.value}</dd>
-              {t.change && <dd className="text-xs text-muted-foreground">{t.change} vs prior period</dd>}
-              {t.sub && <dd className="truncate text-xs text-muted-foreground" title={t.title}>{t.sub}</dd>}
             </div>
           ))}
         </dl>
@@ -469,11 +449,10 @@ export function SignOff({ preparer }: { preparer: string }) {
   )
 }
 
-export function PageFooter({ source, generated, page, of, push }: { source: string; generated: string; page: number; of: number; push: boolean }) {
+export function PageFooter({ page, of, push }: { page: number; of: number; push: boolean }) {
   return (
-    <footer className={`flex justify-between gap-2 text-xs text-muted-foreground ${push ? "mt-auto" : ""}`}>
-      <span>System-generated from {source || "Google Sheet"} · {generated}</span>
-      <span className="tabular-nums">Page {page} of {of}</span>
+    <footer className={`flex justify-end text-xs tabular-nums ${push ? "mt-auto" : ""}`}>
+      Page {page} of {of}
     </footer>
   )
 }

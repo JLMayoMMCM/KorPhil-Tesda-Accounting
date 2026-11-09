@@ -42,7 +42,7 @@ export function AppHeader({ module, user, synced = "" }: { module: Module; user:
             <InputGroupAddon><SearchIcon /></InputGroupAddon>
             <InputGroupInput
               id="search" type="search" name="q" key={params.get("q")} defaultValue={params.get("q") ?? ""}
-              placeholder="Find DV #, payee, or particulars" aria-label="Find vouchers" autoComplete="off"
+              placeholder="Find DV #, payee, or amount (>5000)" aria-label="Find vouchers by DV #, payee, particulars, or amount" autoComplete="off"
             />
             <InputGroupAddon align="inline-end"><Kbd>Ctrl K</Kbd></InputGroupAddon>
           </InputGroup>
@@ -58,6 +58,9 @@ export function AppHeader({ module, user, synced = "" }: { module: Module; user:
           <SyncButton variant="outline">Sync</SyncButton>
         </>}
         {module === "collection" && <>
+          <Button render={<Link href="/collection/collections/?new=1" />} nativeButton={false} data-key="n">
+            <PlusIcon data-icon="inline-start" />New collection<Kbd>N</Kbd>
+          </Button>
           <Button variant="outline" render={<Link href="/collection/reports/" />} nativeButton={false} className="hidden xl:inline-flex">Run report</Button>
           {synced && <span className="hidden text-xs text-muted-foreground 2xl:inline">Synced {synced}</span>}
           <SyncButton variant="outline" module="collection">Sync</SyncButton>

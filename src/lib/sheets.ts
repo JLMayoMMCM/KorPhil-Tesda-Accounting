@@ -2,49 +2,62 @@ import "server-only"
 
 import { after } from "next/server"
 
-import { FIELDS, serialDate, type RawVoucher } from "@/lib/ledger"
-import { CACHE_SECONDS, colLetter, META, pullPlan, readSheet, savedFrom, type Cell, type Column, type List, type Metadata, type Saved, type SheetModel } from "@/lib/sheet-config"
+import { COLLECTION } from "@/lib/collection"
+import { serialDate, type Field, type RawVoucher } from "@/lib/ledger"
+import {
+  CACHE_SECONDS, colLetter, DISBURSEMENT, headerSig, metaKeys, pullPlan, readSheet, savedFrom,
+  type Book, type Cell, type Column, type List, type Metadata, type Saved, type SheetModel,
+} from "@/lib/sheet-config"
 
-// The layout itself (fixed fallback, detection, saved settings) lives in sheet-config.ts.
-// Reads and writes go through the layout found in the sheet (saved settings, then detection), so the form follows its columns.
-// SHEET_LAYOUT=fixed is the rollback switch: the fixed A:L layout of R5 Phase 0.
+// The layout itself (fixed fallback, detection, saved settings) lives in sheet-config.ts; each module's book says
+// what its tab holds. Reads and writes go through the layout found in the tab, so forms follow its columns.
+// SHEET_LAYOUT=fixed is the rollback switch for vouchers: the fixed A:L layout of R5 Phase 0.
 export const LAYOUT_MODE = process.env.SHEET_LAYOUT === "fixed" ? "fixed" : "detected"
-// Dropdown choices come from the "Selection List" tab, one column per list, matched to sheet columns by row-1 header.
+// Dropdown choices come from each spreadsheet's "Selection List" tab, one column per list, matched by row-1 header.
 const LISTS_TAB = "'Selection List'"
-// Codes and names, not numbers or dates: written RAW so Google never converts them.
-const RAW_KEYS = ["dv_no", "check_number", "payee"]
 
 export const SHEET_ID = process.env.GOOGLE_SHEET_ID ?? ""
 export const SHEET_RANGE = process.env.GOOGLE_SHEET_RANGE || "EXP"
-const TAB = `'${SHEET_RANGE.replaceAll("'", "''")}'` // quoted, so any tab name is a valid range
 // The collection module reads its own tab, in its own spreadsheet when COLLECTION_SHEET_ID is set (else the same one).
-// Read-only: no writes, settings or layout modes, and a cache of its own, so neither module's pull can disturb the other's.
+// Each tab has its own cache, so neither module's pull can disturb the other's.
 export const COLLECTION_SHEET_ID = process.env.COLLECTION_SHEET_ID || SHEET_ID
 export const COLLECTION_RANGE = process.env.COLLECTION_SHEET_RANGE || "Collection"
 const API_KEY = process.env.GOOGLE_SHEET_API_KEY ?? ""
 const API = "https://sheets.googleapis.com/v4/spreadsheets"
 
+/** Where each book lives. */
+const TARGETS = {
+  voucher: { book: DISBURSEMENT, id: SHEET_ID, range: SHEET_RANGE },
+  collection: { book: COLLECTION, id: COLLECTION_SHEET_ID, range: COLLECTION_RANGE },
+}
+export type BookName = keyof typeof TARGETS
+type FieldOf<N extends BookName> = (typeof TARGETS)[N]["book"] extends Book<infer F> ? F : never
+const quoted = (range: string) => `'${range.replaceAll("'", "''")}'` // quoted, so any tab name is a valid range
+
+/** A ledger row: each field and extra column as text, and its 1-indexed sheet row for writes. */
+export type RawRow<F extends string> = Record<F, string> & { sheet_row: number; extra?: Record<string, string> }
+
 // ponytail: in-process cache, one pull per minute per server instance; move to a shared store if instances disagree too long
 export { CACHE_SECONDS }
 // Everyone who can reach the cache has already proven sheet access at sign-in (see auth/callback).
 type Freshness = { ts: number; tried: number; error: string | null; running: Promise<string | null> | null }
-type Pull = Freshness & {
+type Pull<F extends string> = Freshness & {
   gen: number // counts writes, so a pull that began before one isn't taken as fresh
-  rows: RawVoucher[]
+  rows: RawRow<F>[]
   title: string
   sheetId: number | null // the tab's grid ID, for row and column metadata
   at: Date | null
   values: Cell[][] // the whole tab as last pulled
   lists: List[]
-  saved: Saved | null
-  model: SheetModel | null // the layout in use
-  candidate: SheetModel | null // saved settings or detection, shown on Settings whatever the mode
+  saved: Saved<F> | null
+  model: SheetModel<F> | null // the layout in use
+  candidate: SheetModel<F> | null // saved settings or detection, shown on Settings whatever the mode
 }
-const pulls = new Map<string, Pull>() // keyed by sheet ID
-function state(): Pull {
-  if (!pulls.has(SHEET_ID))
-    pulls.set(SHEET_ID, { ts: 0, tried: 0, error: null, running: null, gen: 0, rows: [], title: "", sheetId: null, at: null, values: [], lists: [], saved: null, model: null, candidate: null })
-  return pulls.get(SHEET_ID)!
+const pulls = new Map<BookName, Pull<string>>()
+function state<N extends BookName>(name: N): Pull<FieldOf<N>> {
+  if (!pulls.has(name))
+    pulls.set(name, { ts: 0, tried: 0, error: null, running: null, gen: 0, rows: [], title: "", sheetId: null, at: null, values: [], lists: [], saved: null, model: null, candidate: null })
+  return pulls.get(name)! as unknown as Pull<FieldOf<N>>
 }
 
 class SheetsError extends Error {
@@ -83,19 +96,20 @@ export function explain(exc: unknown): string {
 export async function checkAccess(token: string): Promise<string | null> {
   if (!SHEET_ID) return "can't sign in yet: GOOGLE_SHEET_ID is not set in .env.local."
   try {
-    await pullMeta(token)
+    await pullMeta("voucher", token)
     return null
   } catch (exc) {
     return explain(exc)
   }
 }
 
-/** The spreadsheet's title and the tab's grid ID, once per server instance. */
-async function pullMeta(token: string | null) {
-  const meta = await call(`${API}/${SHEET_ID}?fields=properties.title,sheets.properties(sheetId,title)`, token)
-  const pull = state()
+/** The spreadsheet's title and the tab's grid ID. */
+async function pullMeta(name: BookName, token: string | null) {
+  const { id, range } = TARGETS[name]
+  const meta = await call(`${API}/${id}?fields=properties.title,sheets.properties(sheetId,title)`, token)
+  const pull = state(name)
   pull.title = meta?.properties?.title ?? ""
-  pull.sheetId = meta?.sheets?.find((s: { properties: { title: string } }) => s.properties.title === SHEET_RANGE)?.properties?.sheetId ?? null
+  pull.sheetId = meta?.sheets?.find((s: { properties: { title: string } }) => s.properties.title === range)?.properties?.sheetId ?? null
 }
 
 /** Carry out pullPlan for one cache, one pull at a time. Returns the last pull's error. */
@@ -115,92 +129,98 @@ async function keepFresh(f: Freshness, force: boolean, pull: () => Promise<strin
   return f.error
 }
 
-async function pullVouchers(token: string | null): Promise<string | null> {
-  const pull = state(), gen = pull.gen
-  const [[values, error], lists, saved] = await Promise.all([pullValues(token), pullLists(token), pullSaved(token)])
+async function pullBook(name: BookName, token: string | null): Promise<string | null> {
+  const pull = state(name) as unknown as Pull<string>, gen = pull.gen, book = TARGETS[name].book as unknown as Book<string>
+  const [[values, error], lists, saved] = await Promise.all([pullValues(name, token), pullLists(name, token), pullSaved(name, token)])
   // Only a good pull replaces the shared cache, so one user's bad token can't blank it for everyone.
   if (error !== null) return error
-  const use = { lists: lists ?? pull.lists, saved: saved === undefined ? pull.saved : saved }
+  const use = { book, lists: lists ?? pull.lists, saved: saved === undefined ? pull.saved : saved }
   const candidate = readSheet(values, use)
-  const model = LAYOUT_MODE === "detected" ? candidate : readSheet(values, { ...use, fixed: true })
-  Object.assign(pull, { ts: gen === pull.gen ? Date.now() : 0, at: new Date(), values, ...use, candidate, model, rows: toRows(values, model) })
+  const model = LAYOUT_MODE === "detected" || name !== "voucher" ? candidate : readSheet(values, { ...use, fixed: true })
+  Object.assign(pull, { ts: gen === pull.gen ? Date.now() : 0, at: new Date(), values, lists: use.lists, saved: use.saved, candidate, model, rows: toRows(values, model) })
   return null
 }
 
 /**
- * Rows from the cache, kept fresh by keepFresh (force waits for a new pull).
+ * A book's rows from the cache, kept fresh by keepFresh (force waits for a new pull).
  * Returns [rows, error]; each row keeps sheet_row, its 1-indexed row number, for writes.
  */
-export async function fetchVouchers(token: string | null, force = false): Promise<[RawVoucher[], string | null]> {
-  const pull = state()
-  const error = await keepFresh(pull, force, () => pullVouchers(token))
+export async function fetchRows<N extends BookName>(name: N, token: string | null, force = false): Promise<[RawRow<FieldOf<N>>[], string | null]> {
+  const pull = state(name)
+  const error = await keepFresh(pull, force, () => pullBook(name, token))
   return [pull.rows.map((r) => ({ ...r, extra: { ...r.extra } })), error]
 }
 
-export const lastPull = () => {
-  const { title, at, rows, model, candidate, saved, values } = state()
-  return { title, at, rows: rows.length, model, candidate, saved, top: values.slice(0, 20).map((r) => r.map(String)) }
+export const fetchVouchers = (token: string | null, force = false) => fetchRows("voucher", token, force) as Promise<[RawVoucher[], string | null]>
+
+export const lastPull = <N extends BookName = "voucher">(name = "voucher" as N) => {
+  const { title, at, rows, model, candidate, saved, values, lists } = state(name)
+  return { title, at, rows: rows.length, model, candidate, saved, values, lists, top: values.slice(0, 20).map((r) => r.map(String)) }
 }
 
-/** The tab read through one layout (used to check settings before they're saved). */
-export const readWith = (saved: Saved | null) => readSheet(state().values, { saved, lists: state().lists })
+/** The tab read through one set of settings (used to check settings before they're saved). */
+export const readWith = <N extends BookName = "voucher">(saved: Saved<FieldOf<N>> | null, name = "voucher" as N) =>
+  readSheet(state(name).values, { book: TARGETS[name].book as unknown as Book<FieldOf<N>>, saved, lists: state(name).lists })
 
-/** Rows the model counts as vouchers, each field and extra column as text. Missing optional fields read blank. */
-function toRows(values: Cell[][], model: SheetModel): RawVoucher[] {
-  return model.vouchers.map((row) => {
+/** Rows the model reads, each field and extra column as text. Fields with no column read blank. */
+function toRows<F extends string>(values: Cell[][], model: SheetModel<F>): RawRow<F>[] {
+  const blank = Object.fromEntries([...model.layout.missing, ...Object.keys(model.layout.columns)].map((f) => [f, ""]))
+  return model.rows.map((row) => {
     const raw = values[row - 1] ?? []
-    const v = { ...Object.fromEntries(FIELDS.map((f) => [f, ""])), sheet_row: row, extra: {} } as RawVoucher
+    const v = { ...blank, sheet_row: row, extra: {} } as RawRow<F>
     for (const c of model.columns) {
       const cell = raw[c.col] ?? ""
       const text = typeof cell === "number" && c.type === "date" ? serialDate(cell) : String(cell)
-      if (c.field) v[c.field] = text
+      if (c.field) (v as Record<string, unknown>)[c.field] = text
       else v.extra![c.key] = text
     }
     return v
   })
 }
 
-async function pullValues(token: string | null, id = SHEET_ID, tab = TAB): Promise<[Cell[][], string | null]> {
+async function pullValues(name: BookName, token: string | null): Promise<[Cell[][], string | null]> {
+  const { id, range } = TARGETS[name]
   if (!id || !(token || API_KEY)) return [[], "Google Sheet is not configured. Set GOOGLE_SHEET_ID in .env.local."]
   try {
     // The whole used range (tab name alone), so added columns are seen.
     // Raw cell values, not display text: amounts keep every decimal whatever the cell format, dates arrive as serials.
-    return [(await call(valuesUrl(tab, "?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER", id), token)).values ?? [], null]
+    return [(await call(valuesUrl(id, quoted(range), "?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER"), token)).values ?? [], null]
   } catch (exc) {
-    return [[], "Couldn't read the sheet: your Google account " + explain(exc)]
+    return [[], `Couldn't read the ${range} tab: your Google account ` + explain(exc)]
   }
 }
 
 /** Each Selection List column with its row-1 header, or null if the tab couldn't be read. */
-async function pullLists(token: string | null): Promise<List[] | null> {
+async function pullLists(name: BookName, token: string | null): Promise<List[] | null> {
   try {
-    const values: string[][] = (await call(valuesUrl(LISTS_TAB, "?majorDimension=COLUMNS"), token)).values ?? []
+    const values: string[][] = (await call(valuesUrl(TARGETS[name].id, LISTS_TAB, "?majorDimension=COLUMNS"), token)).values ?? []
     return values.map(([header = "", ...rest]) => ({ header: String(header), values: [...new Set(rest.map((v) => String(v).trim()).filter(Boolean))] }))
   } catch {
-    return null // a renamed or missing tab must not block the voucher pull
+    return null // a renamed or missing tab must not block the pull
   }
 }
 
 /** Settings saved in the spreadsheet: null if none, undefined if they couldn't be read (the last ones are kept). */
-async function pullSaved(token: string | null): Promise<Saved | null | undefined> {
+async function pullSaved(name: BookName, token: string | null): Promise<Saved<string> | null | undefined> {
+  const keys = metaKeys(TARGETS[name].book.name)
   try {
-    if (state().sheetId === null) await pullMeta(token)
-    const found: { developerMetadata: Metadata }[] = (await call(`${API}/${SHEET_ID}/developerMetadata:search`, token, {
+    if (state(name).sheetId === null) await pullMeta(name, token)
+    const found: { developerMetadata: Metadata }[] = (await call(`${API}/${TARGETS[name].id}/developerMetadata:search`, token, {
       method: "POST",
-      body: JSON.stringify({ dataFilters: Object.values(META).map((metadataKey) => ({ developerMetadataLookup: { metadataKey } })) }),
+      body: JSON.stringify({ dataFilters: Object.values(keys).map((metadataKey) => ({ developerMetadataLookup: { metadataKey } })) }),
     })).matchedDeveloperMetadata ?? []
-    return savedFrom(found.map((m) => m.developerMetadata), state().sheetId ?? 0)
+    return savedFrom<string>(found.map((m) => m.developerMetadata), state(name).sheetId ?? 0, keys)
   } catch {
     return undefined // e.g. the read-only API key; settings are a refinement, never a blocker
   }
 }
 
 /** Send a request as the signed-in user. Returns [response, error message or null]. */
-async function send(token: string | null, url: string, method: string, body: unknown): Promise<[{ updates?: { updatedRange?: string } } | null, string | null]> {
+async function send(name: BookName, token: string | null, url: string, method: string, body: unknown): Promise<[{ updates?: { updatedRange?: string } } | null, string | null]> {
   if (!token) return [null, "Sign in with Google to save changes to the sheet."]
   try {
     const response = await call(url, token, { method, body: JSON.stringify(body) })
-    const pull = state()
+    const pull = state(name)
     Object.assign(pull, { ts: 0, tried: 0, gen: pull.gen + 1 }) // next read waits for a fresh pull
     return [response, null]
   } catch (exc) {
@@ -208,26 +228,28 @@ async function send(token: string | null, url: string, method: string, body: unk
   }
 }
 
-const valuesUrl = (range: string, query: string, id = SHEET_ID) =>
-  `${API}/${id}/values/${encodeURIComponent(range)}${query}`
+const valuesUrl = (id: string, range: string, query: string) => `${API}/${id}/values/${encodeURIComponent(range)}${query}`
 
 type CellWrite = { row: number; key: string; value: string }
-/** What a write expects of its target rows: a voucher still holding the DV # last pulled, an empty row, or nothing. */
-type Expect = "voucher" | "empty" | "none"
+/** What a write expects of its target rows: a ledger row unchanged since the pull, an empty row, or nothing. */
+type Expect = "row" | "empty" | "none"
 
-const valueOf = (r: RawVoucher | undefined, c: Column) => (!r ? "" : c.field ? r[c.field] : r.extra?.[c.key] ?? "")
+const valueOf = (r: RawRow<string> | undefined, c: Column<string>) => (!r ? "" : c.field ? r[c.field] : r.extra?.[c.key] ?? "")
+const cellText = (v: Cell | undefined) => String(v ?? "").trim()
 
 /**
  * Write single cells, never whole rows: spacers and anything the app doesn't own stay as they are.
- * The header row and each target row are re-read first; if either moved since the pull, nothing is written.
- * RAW_KEYS go in RAW; dates and amounts USER_ENTERED, so the sheet parses them. Returns an error or null.
+ * The header row and each target row are re-read first; if the mapped headers moved, or a target row's mapped cells
+ * changed since the pull, nothing is written. The book's raw keys go in RAW; dates and amounts USER_ENTERED, so the
+ * sheet parses them. Returns an error or null.
  */
-async function writeCells(token: string | null, cells: CellWrite[], by: string, expect: Expect = "voucher"): Promise<string | null> {
+export async function writeCells(name: BookName, token: string | null, cells: CellWrite[], by: string, expect: Expect = "row"): Promise<string | null> {
   if (!token) return "Sign in with Google to save changes to the sheet."
   if (!cells.length) return null
-  if (!state().model) await fetchVouchers(token)
-  const { model, rows } = state()
-  if (!model) return "Couldn't read the sheet. Sync and try again."
+  if (!state(name).model) await fetchRows(name, token)
+  const { model, rows, values } = state(name) as unknown as Pull<string>
+  const { id, book } = TARGETS[name], tab = quoted(TARGETS[name].range)
+  if (!model || model.source === "none") return model?.error ?? "Couldn't read the sheet. Sync and try again."
   const columns = new Map(model.columns.map((c) => [c.key, c]))
   for (const c of cells) {
     const col = columns.get(c.key)
@@ -238,38 +260,38 @@ async function writeCells(token: string | null, cells: CellWrite[], by: string, 
   const before = new Map(rows.map((r) => [r.sheet_row, r])) // as last pulled
   const targets = [...new Set(cells.map((c) => c.row))]
   if (expect !== "none") {
-    const ranges = [model.layout.headerRow, ...targets].map((r) => `ranges=${encodeURIComponent(`${TAB}!${r}:${r}`)}`).join("&")
+    const ranges = [model.layout.headerRow, ...targets].map((r) => `ranges=${encodeURIComponent(`${tab}!${r}:${r}`)}`).join("&")
     let fresh: Cell[][]
     try {
-      const got = await call(`${API}/${SHEET_ID}/values:batchGet?${ranges}&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`, token)
+      const got = await call(`${API}/${id}/values:batchGet?${ranges}&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`, token)
       fresh = (got.valueRanges ?? []).map((v: { values?: Cell[][] }) => v.values?.[0] ?? [])
     } catch (exc) {
       return "Not saved: your Google account " + explain(exc)
     }
-    if (JSON.stringify(fresh[0] ?? []) !== model.headerSig) return "The sheet's header row changed since the last sync. Sync and try again."
-    const dv = columns.get("dv_no")!
+    if (headerSig(fresh[0] ?? [], model.columns) !== model.headerSig) return "The sheet's header row changed since the last sync. Sync and try again."
     for (const [i, row] of targets.entries()) {
       const now = fresh[i + 1] ?? []
       if (expect === "empty") {
-        if (model.columns.some((c) => String(now[c.col] ?? "").trim())) return `Row ${row} is no longer empty. Sync and try again.`
+        if (model.columns.some((c) => cellText(now[c.col]))) return `Row ${row} is no longer empty. Sync and try again.`
         continue
       }
-      const was = before.get(row)
-      if (!was) return `Row ${row} isn't a voucher row.`
-      if (String(now[dv.col] ?? "").trim() !== was.dv_no.trim())
-        return `Row ${row} no longer holds ${was.dv_no.trim() || "the voucher you opened"}. Sync and try again.`
+      if (!before.has(row)) return `Row ${row} isn't a ledger row.`
+      const was = values[row - 1] ?? []
+      const moved = model.columns.find((c) => cellText(now[c.col]) !== cellText(was[c.col]))
+      if (moved) return `Row ${row} changed in the sheet since the last sync (${moved.label}). Sync and try again.`
     }
   }
 
+  const raw = book.raw as string[]
   const groups: [string, CellWrite[]][] = [
-    ["USER_ENTERED", cells.filter((c) => !RAW_KEYS.includes(c.key))],
-    ["RAW", cells.filter((c) => RAW_KEYS.includes(c.key))],
+    ["USER_ENTERED", cells.filter((c) => !raw.includes(c.key))],
+    ["RAW", cells.filter((c) => raw.includes(c.key))],
   ]
   let wrote = false
   for (const [option, group] of groups) {
     if (!group.length) continue
-    const range = (c: CellWrite) => `${TAB}!${colLetter(columns.get(c.key)!.col)}${c.row}`
-    const [, error] = await send(token, `${API}/${SHEET_ID}/values:batchUpdate`, "POST", {
+    const range = (c: CellWrite) => `${tab}!${colLetter(columns.get(c.key)!.col)}${c.row}`
+    const [, error] = await send(name, token, `${API}/${id}/values:batchUpdate`, "POST", {
       valueInputOption: option,
       data: group.map((c) => ({ range: range(c), values: [[c.value]] })),
     })
@@ -277,106 +299,86 @@ async function writeCells(token: string | null, cells: CellWrite[], by: string, 
     wrote = true
     // Server log, for an undo trail beside the sheet's own version history.
     for (const c of group)
-      console.info("[sheet write]", JSON.stringify({ sheet: SHEET_ID, range: range(c), old: valueOf(before.get(c.row), columns.get(c.key)!), new: c.value, by }))
+      console.info("[sheet write]", JSON.stringify({ sheet: id, range: range(c), old: valueOf(before.get(c.row), columns.get(c.key)!), new: c.value, by }))
   }
   return null
 }
 
 /** Set the status column on many rows in one request. */
 export function setStatuses(token: string | null, sheetRows: number[], status: string, by: string) {
-  return writeCells(token, sheetRows.map((row) => ({ row, key: "status", value: status })), by)
+  return writeCells("voucher", token, sheetRows.map((row) => ({ row, key: "status" satisfies Field, value: status })), by)
 }
 
 /** Set one row's DV #, as plain text. */
 export function setDvNo(token: string | null, sheetRow: number, dvNo: string, by: string) {
-  return writeCells(token, [{ row: sheetRow, key: "dv_no", value: dvNo }], by)
+  return writeCells("voucher", token, [{ row: sheetRow, key: "dv_no" satisfies Field, value: dvNo }], by)
 }
 
-/** Write the given columns (by key) of one voucher row; other cells are left alone. */
-export function updateVoucherCells(token: string | null, sheetRow: number, values: Record<string, string>, by: string) {
-  return writeCells(token, Object.entries(values).map(([key, value]) => ({ row: sheetRow, key, value })), by)
+/** Write the given columns (by key) of one ledger row; other cells are left alone. */
+export function updateCells(name: BookName, token: string | null, sheetRow: number, values: Record<string, string>, by: string) {
+  return writeCells(name, token, Object.entries(values).map(([key, value]) => ({ row: sheetRow, key, value })), by)
 }
+export const updateVoucherCells = (token: string | null, sheetRow: number, values: Record<string, string>, by: string) =>
+  updateCells("voucher", token, sheetRow, values, by)
 
 /**
- * Add a voucher. Detected layout: into the first empty row after the last voucher (checked empty first).
- * Fixed layout (Phase 0): appended with INSERT_ROWS, then the RAW cells written into the row Google reports.
+ * Add a ledger row. Detected layout: into the first empty row after the last one (checked empty first).
+ * Fixed voucher layout (Phase 0): appended with INSERT_ROWS, then the RAW cells written into the row Google reports.
  */
-export async function appendVoucher(token: string | null, values: Record<string, string>, by: string): Promise<string | null> {
-  if (!state().model) await fetchVouchers(token)
-  const model = state().model
-  if (!model) return "Couldn't read the sheet. Sync and try again."
+export async function appendRow(name: BookName, token: string | null, values: Record<string, string>, by: string): Promise<string | null> {
+  if (!state(name).model) await fetchRows(name, token)
+  const model = state(name).model as SheetModel<string> | null
+  if (!model || model.source === "none") return model?.error ?? "Couldn't read the sheet. Sync and try again."
   const cells = (row: number) => Object.entries(values).map(([key, value]) => ({ row, key, value }))
-  if (LAYOUT_MODE === "detected") return writeCells(token, cells(model.nextRow).filter((c) => c.value), by, "empty")
+  if (model.source !== "fixed") return writeCells(name, token, cells(model.nextRow).filter((c) => c.value), by, "empty")
 
+  const { id, book } = TARGETS[name], tab = quoted(TARGETS[name].range), raw = book.raw as string[]
   // null leaves a cell untouched: spacers, and the RAW cells written next.
   const line: (string | null)[] = Array(Math.max(...model.columns.map((c) => c.col)) + 1).fill(null)
-  for (const c of model.columns) if (!RAW_KEYS.includes(c.key) && c.key in values) line[c.col] = values[c.key]
-  const [response, error] = await send(token, valuesUrl(`${TAB}!A:${colLetter(line.length - 1)}`, ":append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS"), "POST", { values: [line] })
+  for (const c of model.columns) if (!raw.includes(c.key) && c.key in values) line[c.col] = values[c.key]
+  const [response, error] = await send(name, token, valuesUrl(id, `${tab}!A:${colLetter(line.length - 1)}`, ":append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS"), "POST", { values: [line] })
   if (error) return error
   const row = Number(/!\$?[A-Z]+\$?(\d+)/.exec(response?.updates?.updatedRange ?? "")?.[1])
-  if (!row) return "Partly saved: the new row's DV #, check # and payee weren't written. Sync and fill them in."
-  for (const c of model.columns) if (!RAW_KEYS.includes(c.key) && c.key in values)
-    console.info("[sheet write]", JSON.stringify({ sheet: SHEET_ID, range: `${TAB}!${colLetter(c.col)}${row}`, old: "", new: values[c.key], by }))
-  const failed = await writeCells(token, cells(row).filter((c) => RAW_KEYS.includes(c.key) && c.value), by, "none")
+  if (!row) return "Partly saved: the new row's codes and names weren't written. Sync and fill them in."
+  for (const c of model.columns) if (!raw.includes(c.key) && c.key in values)
+    console.info("[sheet write]", JSON.stringify({ sheet: id, range: `${tab}!${colLetter(c.col)}${row}`, old: "", new: values[c.key], by }))
+  const failed = await writeCells(name, token, cells(row).filter((c) => raw.includes(c.key) && c.value), by, "none")
   return failed && failed.replace("Not saved", `Partly saved (row ${row} was added)`)
 }
+export const appendVoucher = (token: string | null, values: Record<string, string>, by: string) => appendRow("voucher", token, values, by)
 
 /**
- * Replace the layout settings stored in the spreadsheet (null = reset to auto-detect). Writing developer metadata
+ * Replace a book's layout settings stored in the spreadsheet (null = reset to auto-detect). Writing developer metadata
  * needs edit access, so a Viewer gets Google's permission error. Visibility PROJECT: only this app's Cloud project sees it.
  */
-export async function saveSettings(token: string | null, saved: Saved | null): Promise<string | null> {
-  if (state().sheetId === null) {
+export async function saveSettings(token: string | null, saved: Saved<string> | null, name: BookName = "voucher"): Promise<string | null> {
+  if (state(name).sheetId === null) {
     try {
-      await pullMeta(token)
+      await pullMeta(name, token)
     } catch (exc) {
       return "Not saved: your Google account " + explain(exc)
     }
   }
-  const sheetId = state().sheetId ?? 0
+  const keys = metaKeys(TARGETS[name].book.name)
+  const sheetId = state(name).sheetId ?? 0
   const create = (metadataKey: string, metadataValue: string, location: object) =>
     ({ createDeveloperMetadata: { developerMetadata: { metadataKey, metadataValue, location, visibility: "PROJECT" } } })
   const dim = (dimension: "ROWS" | "COLUMNS", i: number) => ({ dimensionRange: { sheetId, dimension, startIndex: i, endIndex: i + 1 } })
+  const old = state(name).saved
+  // Clear the earlier tags, only those that exist (the caller pulls fresh first).
+  const present = !old ? [] : [keys.layout, ...(old.headerRow ? [keys.header] : []), ...(old.ignored.length ? [keys.ignore] : []), ...(Object.keys(old.columns).length ? [keys.column] : [])]
   const requests = [
-    // Clear the earlier tags, only those that exist (the caller pulls fresh first).
-    ...present(state().saved).map((metadataKey) => ({ deleteDeveloperMetadata: { dataFilter: { developerMetadataLookup: { metadataKey } } } })),
+    ...present.map((metadataKey) => ({ deleteDeveloperMetadata: { dataFilter: { developerMetadataLookup: { metadataKey } } } })),
     ...(saved ? [
-      create(META.layout, JSON.stringify({ by: saved.by, at: saved.at }), { spreadsheet: true }),
-      ...(saved.headerRow ? [create(META.header, "1", dim("ROWS", saved.headerRow - 1))] : []),
-      ...saved.ignored.map((r) => create(META.ignore, "1", dim("ROWS", r - 1))),
-      ...Object.entries(saved.columns).map(([c, s]) => create(META.column, JSON.stringify(s), dim("COLUMNS", Number(c)))),
+      create(keys.layout, JSON.stringify({ by: saved.by, at: saved.at }), { spreadsheet: true }),
+      ...(saved.headerRow ? [create(keys.header, "1", dim("ROWS", saved.headerRow - 1))] : []),
+      ...saved.ignored.map((r) => create(keys.ignore, "1", dim("ROWS", r - 1))),
+      ...Object.entries(saved.columns).map(([c, s]) => create(keys.column, JSON.stringify(s), dim("COLUMNS", Number(c)))),
     ] : []),
   ]
-  const [, error] = await send(token, `${API}/${SHEET_ID}:batchUpdate`, "POST", { requests })
+  const [, error] = await send(name, token, `${API}/${TARGETS[name].id}:batchUpdate`, "POST", { requests })
   return error
 }
 
-/** The metadata keys a set of saved settings is stored under. */
-const present = (s: Saved | null) => !s ? [] : [
-  META.layout, ...(s.headerRow ? [META.header] : []), ...(s.ignored.length ? [META.ignore] : []), ...(Object.keys(s.columns).length ? [META.column] : []),
-]
-
 export const sheetUrl = SHEET_ID ? `https://docs.google.com/spreadsheets/d/${SHEET_ID}` : ""
-
-// ---- Collection sheet (read-only) ----
-
-type CollectionPull = Freshness & { at: Date | null; title: string; values: Cell[][] }
-const collectionPull: CollectionPull = { ts: 0, tried: 0, error: null, running: null, at: null, title: "", values: [] }
-
-async function pullCollections(token: string | null): Promise<string | null> {
-  const tab = `'${COLLECTION_RANGE.replaceAll("'", "''")}'`
-  const [[values, err], title] = await Promise.all([
-    pullValues(token, COLLECTION_SHEET_ID, tab),
-    call(`${API}/${COLLECTION_SHEET_ID}?fields=properties.title`, token).then((m) => String(m?.properties?.title ?? ""), () => collectionPull.title),
-  ])
-  if (err !== null) return err.replace("Couldn't read the sheet", `Couldn't read the ${COLLECTION_RANGE} tab`)
-  Object.assign(collectionPull, { ts: Date.now(), at: new Date(), title, values })
-  return null
-}
-
-/** The Collection tab's cells and the spreadsheet's title, cached like the vouchers. Returns [pull, error]. */
-export async function fetchCollectionValues(token: string | null, force = false): Promise<[CollectionPull, string | null]> {
-  return [collectionPull, await keepFresh(collectionPull, force, () => pullCollections(token))]
-}
-
 export const collectionSheetUrl = COLLECTION_SHEET_ID ? `https://docs.google.com/spreadsheets/d/${COLLECTION_SHEET_ID}` : ""

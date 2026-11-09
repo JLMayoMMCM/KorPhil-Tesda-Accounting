@@ -205,10 +205,29 @@ export const labelOf = (r: RawVoucher, key: string) => {
   return blank(text) ? NOT_SET : text.trim()
 }
 
+/**
+ * An amount typed in a search box, as a test on centavos: "12,500" (exactly), ">5000", ">=5000", "<1000", "<=1000", or a
+ * range "1000-5000" / "1000 to 5000" (inclusive, either order). null when the text isn't an amount, so it's text only.
+ */
+export function amountQuery(q: string): ((centavos: number) => boolean) | null {
+  const n = String.raw`₱?\s*([\d,]*\.?\d+)`
+  const m = new RegExp(String.raw`^\s*(>=|<=|>|<)?\s*${n}\s*(?:(?:-|–|to|\.\.)\s*${n})?\s*$`, "i").exec(q)
+  if (!m || (m[1] && m[3])) return null
+  const a = parseAmount(m[2]), b = m[3] === undefined ? null : parseAmount(m[3])
+  if (a === null || (m[3] !== undefined && b === null)) return null
+  if (b !== null) {
+    const [lo, hi] = a <= b ? [a, b] : [b, a]
+    return (v) => v >= lo && v <= hi
+  }
+  const tests: Record<string, (v: number) => boolean> = { ">": (v) => v > a, ">=": (v) => v >= a, "<": (v) => v < a, "<=": (v) => v <= a }
+  return tests[m[1] ?? ""] ?? ((v) => v === a)
+}
+
 /** Rows matching the voucher-list query params (tab, area, col + is, month, year, issue — also "none" / "any" — q, sel). */
 export function filterRows(rows: Voucher[], params: URLSearchParams): Voucher[] {
   const tab = params.get("tab") ?? "all"
   const q = (params.get("q") ?? "").trim().toLowerCase()
+  const amount = amountQuery(q) // an amount in the search box also matches by amount
   const only = new Set(params.getAll("sel"))
   const area = params.get("area")
   const month = params.get("month")
@@ -222,7 +241,7 @@ export function filterRows(rows: Voucher[], params: URLSearchParams): Voucher[] 
     (!month || r.month === month) &&
     (!year || r.month.startsWith(year + "-")) &&
     (!issue || (issue === "none" ? !r.issues.length : issue === "any" ? r.issues.length > 0 : r.issues.includes(issue as Issue))) &&
-    (!q || `${r.dv_no} ${r.payee} ${r.particulars} ${r.check_number}`.toLowerCase().includes(q)) &&
+    (!q || `${r.dv_no} ${r.payee} ${r.particulars} ${r.check_number}`.toLowerCase().includes(q) || !!amount?.(r.amount)) &&
     (!only.size || only.has(String(r.sheet_row))),
   )
 }
@@ -290,4 +309,53 @@ export function paginate(blocks: number[][], h: { cap: number; start: number; ca
   })
   if (used + h.end > h.cap) next()
   return pages
+}
+
+// ---- Ledger rows as form values (any book) ----
+
+/** A ledger row's cells as text by column key: role fields, and extras under extra. */
+export type SheetRow = { sheet_row: number; extra?: Record<string, string> } & Record<string, unknown>
+type FormColumn = { key: string; field: string | null; type: string; options: string[] }
+
+export const cellOf = (r: SheetRow, c: { key: string; field: string | null }) =>
+  String((c.field ? r[c.field] : r.extra?.[c.key]) ?? "")
+
+/** Form values by column key: sheet values, parseable dates as ISO for date pickers, dropdowns in their list's spelling. */
+export function formFromRow(r: SheetRow | null, columns: FormColumn[], start: Record<string, string> = {}): Record<string, string> {
+  return Object.fromEntries(columns.map((c) => {
+    const v = !r ? start[c.key] ?? "" : cellOf(r, c)
+    if (c.type === "dropdown") return [c.key, c.options.find((o) => sameChoice(o, v)) ?? v]
+    return [c.key, c.type === "date" ? parseDate(v) ?? v : v]
+  }))
+}
+
+/** What a row held when a form opened, so a save can tell if it changed in the sheet meanwhile. */
+export const rowSig = (r: SheetRow, columns: { key: string; field: string | null }[]) =>
+  JSON.stringify(columns.map((c) => cellOf(r, c).trim()))
+
+// ---- Finding rows by reference, row number or amount (Settings) ----
+
+export type RowHit = { row: number; cells: string[]; amounts: number[] }
+
+/** Every non-blank row: its cells as text (dates as dates, trailing blanks dropped) and its money cells in centavos. */
+export function rowIndex(values: (string | number | boolean)[][], columns: { col: number; type: string }[]): RowHit[] {
+  const type = new Map(columns.map((c) => [c.col, c.type]))
+  return values.flatMap((raw, i) => {
+    const cells = raw.map((v, j) => (typeof v === "number" && type.get(j) === "date" ? serialDate(v) : String(v ?? "").trim()))
+    while (cells.length && !cells.at(-1)) cells.pop()
+    if (!cells.length) return []
+    const amounts = raw.flatMap((v, j) => {
+      const a = type.get(j) !== "money" ? null : typeof v === "number" ? Math.round(v * 100) : String(v).trim() ? parseAmount(String(v)) : null
+      return a === null ? [] : [a]
+    })
+    return [{ row: i + 1, cells, amounts }]
+  })
+}
+
+/** Rows matching a search: text anywhere in the row (a DV # or OR #, a name), its row number ("140", "row 140"), or an amount as in amountQuery. */
+export function findRows(index: RowHit[], q: string): RowHit[] {
+  const s = q.trim().toLowerCase()
+  if (!s) return []
+  const amount = amountQuery(s), rowNo = /^(?:row\s*)?#?(\d+)$/.exec(s)?.[1]
+  return index.filter((r) => String(r.row) === rowNo || (!!amount && r.amounts.some(amount)) || r.cells.join(" ").toLowerCase().includes(s))
 }

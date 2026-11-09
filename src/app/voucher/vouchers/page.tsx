@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import { VoucherPanel } from "@/components/voucher-panel"
 import { clock, getData } from "@/lib/data"
 import {
-  filterRows, FOR_REVIEW, inTab, isVerified, ISSUES, monthLabel, nextDvNo, VERIFIED, months, parseDate, peso, qs, longDate, sameChoice, TABS, toParams, total,
+  filterRows, FOR_REVIEW, formFromRow, inTab, isVerified, ISSUES, monthLabel, nextDvNo, VERIFIED, months, peso, qs, longDate, TABS, toParams, total,
   values, type Issue, type Tab, type Voucher,
 } from "@/lib/ledger"
 import type { Column } from "@/lib/sheet-config"
@@ -24,14 +24,8 @@ import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = { title: "Vouchers" }
 
-/** Panel form values by column key: sheet values, with parseable dates as ISO for the date pickers and dropdowns in their list's spelling. A new voucher starts For Review. */
-function formFromRow(r: Voucher | null, columns: Column[]): Record<string, string> {
-  return Object.fromEntries(columns.map((c) => {
-    const v = !r ? (c.field === "status" ? FOR_REVIEW : "") : c.field ? r[c.field] : r.extra?.[c.key] ?? ""
-    if (c.type === "dropdown") return [c.key, c.options.find((o) => sameChoice(o, v)) ?? v]
-    return [c.key, c.type === "date" ? parseDate(v) ?? v : v]
-  }))
-}
+/** Panel form values by column key (see formFromRow). A new voucher starts For Review. */
+const voucherForm = (r: Voucher | null, columns: Column[]) => formFromRow(r, columns, { status: FOR_REVIEW })
 
 const plural = (n: number) => (n === 1 ? "" : "s")
 
@@ -68,6 +62,8 @@ export default async function Vouchers({ searchParams }: PageProps<"/voucher/vou
   const filterCount = [area, month, year, issue].filter(Boolean).length
   // Secondary columns: md+ only, and hidden while the panel is open (a bare "hidden" loses to md:table-cell).
   const wide = panel ? "hidden" : "hidden md:table-cell"
+  // Columns added to the sheet beyond the known fields, one table column each, in sheet order.
+  const extras = columns.filter((c) => !c.field && c.visibility !== "hidden")
   const step = (to: number, text: string) => to < 1 || to > pages
     ? <Button variant="outline" size="sm" disabled>{text}</Button>
     : <Button variant="outline" size="sm" render={<Link href={"/voucher/vouchers/" + qs(params, { page: String(to) })} />} nativeButton={false}>{text}</Button>
@@ -148,6 +144,7 @@ export default async function Vouchers({ searchParams }: PageProps<"/voucher/vou
                   <TableHead className="w-full">Payee · particulars</TableHead>
                   <TableHead className={wide}>Area · program · category</TableHead>
                   <TableHead className={wide}>Check #</TableHead>
+                  {extras.map((c) => <TableHead key={c.key} className={cn(wide, c.type === "money" && "text-right")}>{c.label}</TableHead>)}
                   <TableHead className="text-right">Amount</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
@@ -173,6 +170,14 @@ export default async function Vouchers({ searchParams }: PageProps<"/voucher/vou
                         <div className="truncate text-xs text-muted-foreground" title={kind}>{kind || "—"}</div>
                       </TableCell>
                       <TableCell className={cn("text-muted-foreground tabular-nums", wide)}>{r.check_number || "—"}</TableCell>
+                      {extras.map((c) => {
+                        const v = r.extra?.[c.key] ?? ""
+                        return (
+                          <TableCell key={c.key} className={cn("max-w-40", wide, c.type === "money" && "text-right tabular-nums")}>
+                            <div className="truncate" title={v}>{v || "—"}</div>
+                          </TableCell>
+                        )
+                      })}
                       <TableCell className="text-right font-medium tabular-nums">{peso(r.amount)}</TableCell>
                       <TableCell className="max-w-56 whitespace-normal">
                         <div className="flex flex-col items-start gap-1">
@@ -190,7 +195,7 @@ export default async function Vouchers({ searchParams }: PageProps<"/voucher/vou
                 <TableFooter>
                   <TableRow>
                     <TableHead scope="row" colSpan={3}>Total · {shown.length} voucher{plural(shown.length)}</TableHead>
-                    <TableCell colSpan={2} className="hidden md:table-cell" />
+                    <TableCell colSpan={2 + extras.length} className="hidden md:table-cell" />
                     <TableCell className="text-right tabular-nums">{peso(total(shown))}</TableCell>
                     <TableCell />
                   </TableRow>
@@ -235,9 +240,9 @@ export default async function Vouchers({ searchParams }: PageProps<"/voucher/vou
 
       {panel && (
         <VoucherPanel
-          key={panelRow ? `${panelRow.sheet_row}:${Object.values(formFromRow(panelRow, columns)).join("|")}` : "new"}
+          key={panelRow ? `${panelRow.sheet_row}:${Object.values(voucherForm(panelRow, columns)).join("|")}` : "new"}
           row={panelRow?.sheet_row ?? null}
-          initial={isNew ? { ...formFromRow(null, columns), dv_date: today, dv_no: nextDvNo(dvNos, today) } : formFromRow(panelRow, columns)}
+          initial={isNew ? { ...voucherForm(null, columns), dv_date: today, dv_no: nextDvNo(dvNos, today) } : voucherForm(panelRow, columns)}
           dvNos={isNew ? dvNos : undefined}
           columns={columns}
           heading={isNew ? "New voucher" : panelRow!.dv_no || "Untitled DV"}

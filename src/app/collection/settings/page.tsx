@@ -1,21 +1,26 @@
 import { ExternalLinkIcon } from "lucide-react"
 import type { Metadata } from "next"
 
+import { LayoutEditor } from "@/components/layout-editor"
 import { SyncButton } from "@/components/sync-button"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { COLLECTION_LABELS } from "@/lib/collection"
+import { COLLECTION, COLLECTION_LABELS, type CollectionField } from "@/lib/collection"
 import { clock, getCollectionData } from "@/lib/data"
-import { COLLECTION, colLetter, type CollectionField } from "@/lib/sheet-config"
-import { COLLECTION_RANGE, COLLECTION_SHEET_ID, collectionSheetUrl } from "@/lib/sheets"
+import { rowIndex } from "@/lib/ledger"
+import { RoleNote } from "@/components/role-note"
+import { bookRoles, colLetter } from "@/lib/sheet-config"
+import { COLLECTION_RANGE, COLLECTION_SHEET_ID, collectionSheetUrl, lastPull } from "@/lib/sheets"
 
 export const metadata: Metadata = { title: "Settings · Collections" }
 
-/** Where the collection module reads from, the header it matched, and every row it left out. Read-only: the tab is edited in Sheets. */
+/** Where the collection module reads from, the header it matched, the layout settings, and every row it left out. */
 export default async function CollectionSettings() {
   const { layout, entries, skipped, title, at } = await getCollectionData()
+  const pull = lastPull("collection")
+  const roles = bookRoles(COLLECTION, pull.lists)
   const fields = Object.keys(COLLECTION.headers) as CollectionField[]
   return (
     <div className="flex max-w-4xl flex-col gap-4">
@@ -47,7 +52,7 @@ export default async function CollectionSettings() {
         <CardHeader>
           <CardTitle>Columns</CardTitle>
           <CardDescription>
-            {layout ? `Header row ${layout.headerRow}, entries from row ${layout.firstRow}. Columns past ${colLetter(COLLECTION.lastCol!)} (the summary tables) are not read.` : "No header row found yet."}
+            {layout ? `Header row ${layout.headerRow}, entries from row ${layout.firstRow}. Columns past ${colLetter(Math.max(...Object.values(layout.columns) as number[], ...layout.extras.map((x) => x.col)))} (Deposit, Undeposited and the summary tables) are not read.` : "No header row found yet."}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -76,6 +81,27 @@ export default async function CollectionSettings() {
           </Table>
         </CardContent>
       </Card>
+
+      {pull.top.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Layout settings</CardTitle>
+            <CardDescription>
+              Choose the header row, rows to ignore, and each column&apos;s role, input and visibility. Saved inside the spreadsheet
+              as hidden developer metadata, apart from the voucher settings. The ledger ends at its last column with a role, so
+              give a column further right a role (or &ldquo;No role&rdquo;) to read it.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <RoleNote roles={roles} labels={COLLECTION_LABELS} />
+            <LayoutEditor book="collection" fields={Object.fromEntries(roles.roles.map((r) => [r.field, r.label]))} top={pull.top} index={rowIndex(pull.values, pull.candidate?.columns ?? [])} saved={pull.saved} detected={{
+              headerRow: layout?.headerRow ?? 1,
+              roles: { ...Object.fromEntries(Object.entries(layout?.columns ?? {}).map(([f, c]) => [c, f])),
+                ...Object.fromEntries((layout?.extras ?? []).filter((x) => x.custom).map((x) => [x.col, `x:${x.text}`])) },
+            }} />
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

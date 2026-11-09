@@ -1,11 +1,56 @@
-// The Collection tab read through its spec: one entry per receipt, parsed and checked. Pure, like ledger.ts.
-// Money is integer centavos; dates are ISO "YYYY-MM-DD". Deposit rows (cash to the bank) are recognised and left out.
-import { blank, NOT_SET, parseAmount, parseDate, serialDate } from "./ledger.ts"
-import { COLLECTION, COLLECTION_HEADERS, detectLayout, OVERRIDES, type Cell, type CollectionField, type Layout } from "./sheet-config.ts"
+// The Collection tab read through its book: one entry per receipt, parsed and checked. Pure, like ledger.ts.
+// Money is integer centavos; dates are ISO "YYYY-MM-DD". Deposit and Undeposited columns are not read; deposit lines (no amount, no OR #) drop out.
+import { amountQuery, blank, NOT_SET, parseAmount, parseDate, serialDate } from "./ledger.ts"
+import { readSheet, type Book, type Cell, type List, type RowClass, type Saved, type SheetModel } from "./sheet-config.ts"
+
+// The Collection tab: headers in row 1, the ledger from A, then Deposit and Undeposited Collection (not read) and
+// hand-made monthly summary tables right beside them. The ledger ends at its last known column ("known" bound).
+export const COLLECTION_HEADERS = {
+  date: ["Date", "Collection date", "Date of collection"],
+  or_no: ["Reference No./OR No.", "OR No", "OR #", "Reference No", "Official Receipt No"],
+  payor: ["Payor", "Payer", "Name of Payor"],
+  uacs: ["UACS CODE", "UACS", "Account code"],
+  area: ["Area", "Collection area", "Trade area"],
+  nature: ["Nature of Collection", "Nature", "Particulars"],
+  collection: ["Collection", "Collections", "Amount collected"],
+}
+export type CollectionField = keyof typeof COLLECTION_HEADERS
 
 export const COLLECTION_LABELS: Record<CollectionField, string> = {
   date: "Date", or_no: "OR #", payor: "Payor", uacs: "UACS code", area: "Area", nature: "Nature of collection",
-  collection: "Collection", deposit: "Deposit",
+  collection: "Collection",
+}
+
+const asDate = (v: Cell | undefined) => (typeof v === "number" && v > 0 ? parseDate(serialDate(v)) : parseDate(String(v ?? "")))
+const asAmount = (v: Cell | undefined) => (typeof v === "number" ? Math.round(v * 100) : parseAmount(String(v ?? "")))
+
+/**
+ * A row with a date and an amount in Collection is a receipt. Rows with nothing in Collection and no OR # (deposit
+ * lines) drop out quietly. Totals, and receipts with an OR # but no amount, are skipped and listed, so no receipt drops
+ * out unseen. Only the ledger's own columns are looked at.
+ */
+function classify(raw: Cell[], columns: Partial<Record<CollectionField, number>>): RowClass {
+  const at = (f: CollectionField) => (columns[f] === undefined ? "" : raw[columns[f]!])
+  if ((Object.values(columns) as number[]).every((j) => !String(raw[j] ?? "").trim())) return { kind: "skip", reason: "Blank" }
+  const iso = asDate(at("date")), amount = asAmount(at("collection")), orNo = String(at("or_no") ?? "").trim()
+  if (amount === 0 && !orNo) return { kind: "skip", reason: "Blank" } // a deposit line, or a note: not a receipt
+  if (amount === null) return { kind: "skip", reason: "Amount written as text" }
+  if (!amount) return { kind: "skip", reason: iso ? "No amount" : "Text only" }
+  if (!iso) return { kind: "skip", reason: String(at("date") ?? "").trim() ? "Unreadable date" : "Totals or subtotal" }
+  return { kind: "voucher", reason: "" }
+}
+
+export const COLLECTION: Book<CollectionField> = {
+  name: "korphil.collection",
+  headers: COLLECTION_HEADERS,
+  required: ["date", "collection"],
+  bound: "known",
+  overrides: { headerRow: null, firstRow: null },
+  types: { date: "date", or_no: "text", payor: "text", uacs: "dropdown", area: "dropdown", nature: "text", collection: "money" },
+  lists: [],
+  rolesHeader: ["COLLECTION ROLES"],
+  raw: ["or_no", "payor", "uacs", "area", "nature"], // every text field: typed text is never read as a formula
+  classify,
 }
 
 // Checks on every receipt.
@@ -23,42 +68,31 @@ export type Entry = Record<CollectionField, string> & {
   month: string // "YYYY-MM"
   collected: number // centavos
   issues: EntryIssue[]
+  extra: Record<string, string> // columns beyond the known fields, by column key ("x:" + header)
 }
 
 export type Skipped = { row: number; reason: string; preview: string }
-export type CollectionRead = { layout: Layout<CollectionField> | null; error: string | null; entries: Entry[]; skipped: Skipped[] }
+export type CollectionRead = { model: SheetModel<CollectionField>; error: string | null; entries: Entry[]; skipped: Skipped[] }
 
-const asDate = (v: Cell | undefined) => (typeof v === "number" && v > 0 ? parseDate(serialDate(v)) : parseDate(String(v ?? "")))
-const asAmount = (v: Cell | undefined) => (typeof v === "number" ? Math.round(v * 100) : parseAmount(String(v ?? "")))
-
-/**
- * Every row under the header with a date and an amount in Collection is an entry. Deposit rows (an amount or text in
- * Deposit, nothing collected) are not the app's business and drop out quietly. Totals and rows with text but no amount are
- * skipped and listed, so nothing else drops out unseen. Newest first.
- */
-export function readCollections(values: Cell[][], overrides = OVERRIDES): CollectionRead {
-  const [layout, error] = detectLayout(values, overrides, {}, COLLECTION)
-  if (!layout) return { layout, error, entries: [], skipped: [] }
-  const cols = Object.entries(layout.columns) as [CollectionField, number][]
-  const entries: Entry[] = [], skipped: Skipped[] = []
-  values.forEach((raw, i) => {
-    const row = i + 1
-    if (row < layout.firstRow) return
-    const at = (f: CollectionField) => (layout.columns[f] === undefined ? "" : raw[layout.columns[f]!])
-    const text = Object.fromEntries((Object.keys(COLLECTION_HEADERS) as CollectionField[]).map((f) => [f, String(at(f) ?? "").trim()])) as Record<CollectionField, string>
-    if (cols.every(([f]) => !text[f])) return
-    const iso = asDate(at("date")), collected = asAmount(at("collection"))
-    if (!collected && text.deposit) return // a deposit row
-    const preview = cols.map(([f]) => text[f]).filter(Boolean).slice(0, 4).join(" · ").slice(0, 80)
-    if (collected === null) return skipped.push({ row, reason: "Amount written as text", preview })
-    if (!collected) return skipped.push({ row, reason: iso ? "No amount" : "Text only", preview })
-    if (!iso) return skipped.push({ row, reason: text.date ? "Unreadable date" : "Totals or subtotal", preview })
-    entries.push({ ...text, sheet_row: row, iso, month: iso.slice(0, 7), collected, issues: [] })
+/** Entries from a model read through COLLECTION, checked, newest first. */
+export function entriesFrom(values: Cell[][], model: SheetModel<CollectionField>): CollectionRead {
+  const { columns } = model.layout
+  const entries = model.rows.map((row): Entry => {
+    const raw = values[row - 1] ?? []
+    const text = Object.fromEntries((Object.keys(COLLECTION_HEADERS) as CollectionField[])
+      .map((f) => [f, columns[f] === undefined ? "" : String(raw[columns[f]!] ?? "").trim()])) as Record<CollectionField, string>
+    const iso = asDate(raw[columns.date!])!
+    const extra = Object.fromEntries(model.columns.filter((c) => !c.field).map((c) => [c.key, String(raw[c.col] ?? "").trim()]))
+    return { ...text, sheet_row: row, iso, month: iso.slice(0, 7), collected: asAmount(raw[columns.collection!])!, issues: [], extra }
   })
   check(entries)
   entries.sort((a, b) => (a.iso < b.iso ? 1 : a.iso > b.iso ? -1 : b.sheet_row - a.sheet_row))
-  return { layout, error: null, entries, skipped }
+  return { model, error: model.error, entries, skipped: model.skipped.map(({ row, reason, preview }) => ({ row, reason, preview })) }
 }
+
+/** The tab's cells straight to entries (tests, and any caller without a cached model). */
+export const readCollections = (values: Cell[][], opts: { saved?: Saved<CollectionField> | null; lists?: List[] } = {}) =>
+  entriesFrom(values, readSheet(values, { book: COLLECTION, ...opts }))
 
 function check(entries: Entry[]) {
   const seen = new Map<string, number>()
@@ -103,12 +137,13 @@ export const account = (uacs: string) => uacs.replace(/^\s*\d{6,}\s*[-–]\s*/, 
 export function filterEntries(es: Entry[], p: URLSearchParams): Entry[] {
   const month = p.get("month"), year = p.get("year"), area = p.get("area"), uacs = p.get("uacs"), issue = p.get("issue")
   const q = (p.get("q") ?? "").trim().toLowerCase()
+  const amount = amountQuery(q) // an amount in the search box also matches by amount
   return es.filter((e) =>
     (!month || e.month === month) &&
     (!year || e.month.startsWith(year + "-")) &&
     (!area || tag(e, "area") === area) &&
     (!uacs || tag(e, "uacs") === uacs) &&
     (!issue || (issue === "any" ? e.issues.length > 0 : e.issues.includes(issue as EntryIssue))) &&
-    (!q || `${e.or_no} ${e.payor} ${e.nature} ${e.uacs}`.toLowerCase().includes(q)),
+    (!q || `${e.or_no} ${e.payor} ${e.nature} ${e.uacs}`.toLowerCase().includes(q) || !!amount?.(e.collected)),
   )
 }

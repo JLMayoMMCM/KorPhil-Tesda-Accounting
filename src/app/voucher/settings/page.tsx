@@ -9,8 +9,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { clock, getData } from "@/lib/data"
-import { FIELD_LABELS, type Field } from "@/lib/ledger"
-import { colLetter, fixedLayout, INPUT_TYPES, layoutDiff, REQUIRED, VISIBILITY, type SheetModel } from "@/lib/sheet-config"
+import { FIELD_LABELS, rowIndex, type Field } from "@/lib/ledger"
+import { RoleNote } from "@/components/role-note"
+import { bookRoles, colLetter, DISBURSEMENT, fixedLayout, INPUT_TYPES, layoutDiff, REQUIRED, VISIBILITY, type SheetModel } from "@/lib/sheet-config"
 import { fullName } from "@/lib/session"
 import { CACHE_SECONDS, LAYOUT_MODE, SHEET_ID, SHEET_RANGE, sheetUrl } from "@/lib/sheets"
 
@@ -18,6 +19,7 @@ export const metadata: Metadata = { title: "Settings" }
 
 export default async function Settings() {
   const { error, pull, user } = await getData()
+  const roles = bookRoles(DISBURSEMENT, pull.lists)
   const open = (text: string) => sheetUrl && (
     <Button variant="outline" render={<a href={sheetUrl} target="_blank" rel="noopener" />} nativeButton={false}>
       {text}<ExternalLinkIcon data-icon="inline-end" />
@@ -90,10 +92,12 @@ export default async function Settings() {
               when rows or columns are inserted around them. Order of use: saved settings, then auto-detection, then the fixed layout.
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <LayoutEditor top={pull.top} saved={pull.saved} detected={{
+          <CardContent className="flex flex-col gap-3">
+            <RoleNote roles={roles} labels={FIELD_LABELS} />
+            <LayoutEditor book="voucher" fields={Object.fromEntries(roles.roles.map((r) => [r.field, r.label]))} top={pull.top} index={rowIndex(pull.values, pull.candidate.columns)} saved={pull.saved} detected={{
               headerRow: pull.candidate.layout.headerRow,
-              roles: Object.fromEntries(Object.entries(pull.candidate.layout.columns).map(([f, c]) => [c, f as Field])),
+              roles: { ...Object.fromEntries(Object.entries(pull.candidate.layout.columns).map(([f, c]) => [c, f as Field])),
+                ...Object.fromEntries((pull.candidate.layout.extras ?? []).filter((x) => x.custom).map((x) => [x.col, `x:${x.text}`])) },
             }} />
           </CardContent>
         </Card>
@@ -102,7 +106,7 @@ export default async function Settings() {
   )
 }
 
-const SOURCE = { saved: "Saved settings", detected: "Detected from the header row", fixed: "Fixed layout (A:L, header row 2, vouchers from row 5)" }
+const SOURCE = { saved: "Saved settings", detected: "Detected from the header row", fixed: "Fixed layout (A:L, header row 2, vouchers from row 5)", none: "No layout" }
 // What the app switches off when an optional column is missing.
 const WITHOUT: Partial<Record<Field, string>> = {
   status: "Verification controls hidden",
@@ -136,8 +140,8 @@ function SheetLayout({ model, candidate }: { model: SheetModel; candidate: Sheet
             ? <Badge variant="destructive"><CircleAlertIcon data-icon="inline-start" />Differs from the fixed layout: {differs.map((f) => FIELD_LABELS[f]).join(", ")}</Badge>
             : <Badge variant="secondary"><CircleCheckIcon data-icon="inline-start" />Same columns as the fixed layout</Badge>)}
           <span className="text-muted-foreground">
-            {SOURCE[candidate.source]}: header on row {candidate.layout.headerRow} · {candidate.vouchers.length} vouchers
-            {model !== candidate && ` (the fixed layout reads ${model.vouchers.length})`}
+            {SOURCE[candidate.source]}: header on row {candidate.layout.headerRow} · {candidate.rows.length} vouchers
+            {model !== candidate && ` (the fixed layout reads ${model.rows.length})`}
           </span>
         </div>
         <Table>

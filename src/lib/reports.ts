@@ -100,12 +100,11 @@ export type Fmt = "text" | "int" | "peso" | "pct" | "figure"
 export type Col = { head: string; fmt: Fmt; w: number }
 export type Cell = string | number | null
 /**
- * One schedule. no and cluster: its number and group in the report (none for the basis of preparation). basis: what it
- * was computed on, printed under the title. notes: definitions and caveats, printed under the table.
+ * One schedule. no and cluster: its number and group in the report (none for the basis of preparation).
  * zones: when set, each row prints as three zones of column indexes (w is then unused): left, a stack of identifiers;
  * main, the text with a label line (tags, values only; named, "Head: value") under it; right, amount and review.
  */
-export type Table = { kind: string; no?: number; cluster?: string; title: string; basis?: string; cols: Col[]; rows: Cell[][]; foot?: Cell[]; notes: string[]; zones?: Zones; charts?: KpiCharts }
+export type Table = { kind: string; no?: number; cluster?: string; title: string; cols: Col[]; rows: Cell[][]; foot?: Cell[]; zones?: Zones; charts?: KpiCharts }
 export type Zones = { left: number[]; main: number[]; tags: number[]; named: number[]; right: number[] }
 
 /**
@@ -115,8 +114,7 @@ export type Zones = { left: number[]; main: number[]; tags: number[]; named: num
 export type KpiCharts = {
   // Labelled facts, no prose: [label, value]. Each is one lookup over the vouchers in scope.
   highlights: [string, string][]
-  // sub: a second, muted line (year to date, or the amount behind a share); title: that line's exact figure.
-  tiles: { label: string; value: string; change: string | null; sub?: string; title?: string }[]
+  tiles: { label: string; value: string }[]
   trend: { month: string; amount: number; count: number; inScope: boolean }[]
   // Part-to-whole of the amount: the five largest, then the rest as one slice. null: the sheet has no such column.
   area: Slice[] | null
@@ -158,9 +156,6 @@ const AMOUNT: Col = { head: "Amount (₱)", fmt: "peso", w: 0.18 }
 const AVERAGE: Col = { head: "Average (₱)", fmt: "peso", w: 0.16 }
 const SHARE: Col = { head: "% of total", fmt: "pct", w: 0.12 }
 const TOTAL = "Total"
-const NOT_SET_NOTE = `"${NOT_SET}": the column is blank on the voucher, or holds a placeholder such as "(BLANK)", "-" or "N/A".`
-// ₱25.64M: for the short second lines under KPI tiles; the exact figure rides along as a tooltip and in the table.
-const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 })
 
 const share = (v: number, of: number) => (of ? v / of : null)
 const avg = (amt: number, n: number) => (n ? Math.round(amt / n) : null)
@@ -176,14 +171,13 @@ function grouped(head: string, lines: [string, number, number][], rows: Voucher[
     cols: [NO, { head, fmt: "text", w: extra ? 0.24 : 0.38 }, COUNT, AMOUNT, AVERAGE, SHARE, ...(extra ? [extra] : [])],
     rows: lines.map(([k, c, a], i) => [i + 1, k, c, a, avg(a, c), share(a, sum)]),
     foot: ["", TOTAL, n, sum, avg(sum, n), sum ? 1 : null],
-    notes: lines.some(([k]) => k === NOT_SET) ? [NOT_SET_NOTE] : [],
   }
 }
 
 /** A breakdown by one column: largest first; "Not set" last, as unclassified lines go at the foot of a schedule. */
 const breakdown = (head: string, key: (r: Voucher) => string) => ({ rows }: Ctx): Body => {
   const lines = group(rows, key).sort((a, b) => Number(a[0] === NOT_SET) - Number(b[0] === NOT_SET))
-  return { ...grouped(head, lines, rows), basis: `Vouchers in scope, grouped by ${head.toLowerCase()}, largest amount first.` }
+  return grouped(head, lines, rows)
 }
 
 /** Indicator · this period · prior period · change. Without a prior period, just the value. */
@@ -221,7 +215,7 @@ function kpis({ rows, prior, inArea, scope, month, has }: Ctx): Body {
 
   // Charts reuse the table's own figures (looked up by indicator), so the two can't disagree.
   const at = (k: string) => now.findIndex(([l]) => l === k)
-  const tile = (k: string) => { const i = at(k); return { label: k, value: show(now[i][2], now[i][1]), change: before && change(now[i][2], before[i][2], now[i][1]) } }
+  const tile = (k: string) => { const i = at(k); return { label: k, value: show(now[i][2], now[i][1]) } }
   // Trend: a period gets at least 12 months for context; all dates runs from the first month on record. 24 at most.
   // It stops at this month, so a year in progress doesn't plot the months to come as zero.
   const dated = months(inArea), end = [scope.to || dated[0], month].filter(Boolean).sort()[0]
@@ -240,21 +234,13 @@ function kpis({ rows, prior, inArea, scope, month, has }: Ctx): Body {
     return [...top.map(([name, , amount]) => ({ name, amount, share: share(amount, sum) })),
       ...(rest.length ? [{ name: `All others (${rest.length})`, amount: amt, share: share(amt, sum), rest: true }] : [])]
   }
-  const millions = (v: number) => `₱${compact.format(v / 100)}`
 
   // Year to date beside a month, quarter or range: January of the period's last year through its last month.
   // Left out when the period already starts in January, as it would only repeat the total.
   const ytdFrom = `${scope.to.slice(0, 4)}-01`
   const ytd = scope.from && scope.by !== "year" && scope.from !== ytdFrom
     ? total(inArea.filter((r) => r.month >= ytdFrom && r.month <= scope.to)) : null
-  const totalTile = {
-    ...tile("Total disbursements"),
-    ...(ytd !== null && { sub: `YTD ${millions(ytd)} · Jan–${longMonth(scope.to).slice(0, 3)}`, title: `Year to date: ${peso(ytd)}` }),
-  }
-  const uncategorised = sum - total(rows.filter((r) => !blank(r.category)))
-  const fourth = has("category")
-    ? { ...tile("Uncategorised amount (share)"), sub: `${millions(uncategorised)} has no category`, title: `${peso(uncategorised)} has no category` }
-    : tile("Exception rate (vouchers for review)")
+  const fourth = tile(has("category") ? "Uncategorised amount (share)" : "Exception rate (vouchers for review)")
 
   // Highlights: the largest named trade area and category ("Not set" is left to the tiles), the largest voucher, what's pending.
   const largest = (f: Field) => {
@@ -268,12 +254,13 @@ function kpis({ rows, prior, inArea, scope, month, has }: Ctx): Body {
     ...largest("trade_area"),
     ...largest("category"),
     ...(big ? [["Largest single voucher", [peso(big.amount), blank(big.dv_no) ? "no DV #" : `DV ${big.dv_no.trim()}`, ...(blank(big.payee) ? [] : [big.payee.trim()])].join(" · ")] as [string, string]] : []),
+    ...(ytd !== null ? [[`Year to date (Jan–${longMonth(scope.to).slice(0, 3)})`, peso(ytd)] as [string, string]] : []),
     ["Pending review", flagged.length ? `${flagged.length} voucher${flagged.length === 1 ? "" : "s"} · ${peso(total(flagged))}` : "None"],
   ]
 
   const charts: KpiCharts = {
     highlights,
-    tiles: [totalTile, tile("Number of vouchers"), tile("Average per voucher"), fourth],
+    tiles: [tile("Total disbursements"), tile("Number of vouchers"), tile("Average per voucher"), fourth],
     trend,
     area: slices("trade_area"),
     category: slices("category"),
@@ -281,25 +268,12 @@ function kpis({ rows, prior, inArea, scope, month, has }: Ctx): Body {
       .map((f) => ({ label: FIELD_LABELS[f], share: share(total(rows.filter((r) => !blank(r[f]))), sum) })),
     show: Object.keys(KPI_BLOCKS) as KpiBlock[],
   }
-  const undated = rows.some((r) => !r.month)
   return {
     charts,
-    basis: before ? `Vouchers in scope, against ${scope.prior!.label.replace(/^For the /, "the ")}.` : "Vouchers in scope. No prior period is compared for all dates.",
     cols: before
       ? [{ head: "Indicator", fmt: "text", w: 0.4 }, { head: "This period", fmt: "figure", w: 0.21 }, { head: "Prior period", fmt: "figure", w: 0.21 }, { head: "Change", fmt: "figure", w: 0.18 }]
       : [{ head: "Indicator", fmt: "text", w: 0.6 }, { head: "Value", fmt: "figure", w: 0.4 }],
     rows: now.map(([k, fmt, v], i) => before ? [k, show(v, fmt), show(before[i][2], fmt), change(v, before[i][2], fmt)] : [k, show(v, fmt)]),
-    notes: [
-      "Median: the middle voucher amount. Average per month: total over the months of the period that have begun.",
-      "Exception rate: vouchers failing at least one review check (Schedule \"Exceptions for review\"), over all vouchers.",
-      ...(before ? ["Change: percent change for amounts and counts; pp (percentage points) for shares."] : []),
-      ...(ytd !== null ? [`YTD (year to date): the same trade area from January ${scope.to.slice(0, 4)} through the last month of the period.`] : []),
-      ...(has("category") ? [`Uncategorised amount: the share of the amount whose category is ${NOT_SET.toLowerCase()}.`] : []),
-      "Highlights: the largest trade area and category leave out \"Not set\"; pending review counts vouchers failing a review check.",
-      ...(charts.area || charts.category ? [`Shares by trade area and category: of the amount in scope, the five largest by amount and the rest as "All others"; ${NOT_SET_NOTE}`] : []),
-      ...(charts.coverage.length ? ["Classification coverage: the share of the amount whose voucher has the column filled in; the rest is reported as \"Not set\" in its schedule."] : []),
-      `Monthly trend: vouchers by month of DV date${n > w ? `, the last ${w} months only (every month is in Schedule "Disbursements by month")` : ""}${scope.from ? "; months before the period are shown for context, in gray" : ""}${undated ? "; undated vouchers are counted in the figures but not in the trend" : ""}.`,
-    ],
   }
 }
 
@@ -314,23 +288,16 @@ function monthly({ rows, scope }: Ctx): Body {
   t.rows.forEach((r) => r.push((run += r[3] as number)))
   t.foot!.push(run)
   return {
-    ...t, basis: "Vouchers in scope by month of DV date, oldest first. Months with no vouchers are shown as zero.",
-    notes: undated.length ? ["Undated: the DV date is blank or unreadable."] : [],
+    ...t,
   }
 }
 
 function review({ rows }: Ctx): Body {
   const flagged = rows.filter((r) => r.issues.length), n = rows.length
   return {
-    basis: "Vouchers in scope that fail one or more review checks, by check.",
     cols: [NO, { head: "Check", fmt: "text", w: 0.38 }, { ...COUNT, w: 0.12 }, { ...AMOUNT, w: 0.22 }, { head: "% of vouchers", fmt: "pct", w: 0.22 }],
     rows: byIssue(flagged).map(([i, list], k) => [k + 1, ISSUES[i as Issue], list.length, total(list), share(list.length, n)]),
     foot: ["", "Vouchers with at least one exception", flagged.length, total(flagged), share(flagged.length, n)],
-    notes: [
-      "A voucher can fail more than one check, so the lines can add up to more than the total.",
-      "Checks: DV # blank, or the same DV # on more than one row of the sheet; DV date blank or unreadable; amount blank, zero or unreadable; check # blank; trade area blank.",
-      "A voucher marked Verified is flagged only for a duplicate DV #; its other blanks were signed off.",
-    ],
   }
 }
 
@@ -370,10 +337,8 @@ function audit({ rows, columns }: Ctx): Body {
   const free = zones.main.length ? zones.main : zones.left.slice(1)
   ;[TOTAL, `${rows.length} vouchers`].forEach((v, k) => { if (free[k] !== undefined) foot[free[k]] = v })
   return {
-    basis: "Every voucher in scope, by DV date then sheet row; undated vouchers last. All columns shown in the sheet, one block per voucher.",
     cols, zones, foot,
     rows: list.map((r) => [r.sheet_row, ...shown.map((c) => c.field === "gross_amount" ? r.amount : c.field ? r[c.field] : r.extra?.[c.key] ?? ""), r.issues.map((i) => ISSUES[i]).join(", ") || "OK"]),
-    notes: [`Row: the voucher's row number in the sheet, to trace each line to its source. Text is as recorded in the sheet; ${AMOUNT.head} is the gross amount as read.`],
   }
 }
 
@@ -426,7 +391,7 @@ function basisOf(all: Voucher[], scoped: Voucher[], scope: Scope, area: string, 
   return {
     kind: "basis", title: "Basis of preparation",
     cols: [{ head: "Item", fmt: "text", w: 0.28 }, { head: "Detail", fmt: "text", w: 0.72 }],
-    rows: lines, notes: [],
+    rows: lines,
   }
 }
 

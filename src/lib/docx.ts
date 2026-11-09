@@ -4,8 +4,8 @@ import { crc32, deflateRawSync } from "node:zlib"
 
 /** One schedule, already formatted as text: what the Word file prints. right: the columns set flush right (amounts). */
 export type DocTable = {
-  title: string; basis?: string; highlights: string[]
-  head: string[]; width: number[]; right: boolean[]; rows: string[][]; foot?: string[]; notes: string[]
+  title: string; highlights: string[]
+  head: string[]; width: number[]; right: boolean[]; rows: string[][]; foot?: string[]
 }
 /** The report sheet's letterhead lines (see Letterhead in report-sheet.tsx). */
 export const LETTERHEAD = [
@@ -71,19 +71,16 @@ function table(t: DocTable, contentWidth: number) {
     row(t.head, { bold: true, shade: true, header: true }) + t.rows.map((r) => row(r)).join("") + (t.foot ? row(t.foot, { bold: true, top: true }) : "") + "</w:tbl>"
 }
 
-/** The Word document's body: letterhead, report title and scope, then each schedule with its basis, table and notes. */
-export function documentXml(title: string, subtitle: string, office: string, tables: DocTable[], paper: keyof typeof PAGES = "short") {
+/** The Word document's body: letterhead, report title and scope, then each schedule with its table. */
+export function documentXml(title: string, subtitle: string, tables: DocTable[], paper: keyof typeof PAGES = "short") {
   const [w, h] = PAGES[paper], contentWidth = w - 2 * MARGIN
   const head = letterhead(contentWidth) +
-    para(run(`ACCOUNTING OFFICE · ${office.toUpperCase()}`, { size: 16, color: "78716C" }), { align: "center", before: 160, after: 40 }) +
-    para(run(title, { bold: true, size: 28 }), { align: "center", after: 40 }) +
-    para(run(subtitle, { size: 20, color: "57534E" }), { align: "center", after: 240 })
+    para(run(title, { bold: true, size: 28 }), { align: "center", before: 160, after: 40 }) +
+    para(run(subtitle, { size: 20 }), { align: "center", after: 240 })
   const body = tables.map((t) =>
     para(run(t.title, { bold: true, size: 24 }), { before: 240, after: 60, keep: true }) +
-    (t.basis ? para(run(t.basis, { italic: true, size: 18, color: "57534E" }), { after: 120, keep: true }) : "") +
     t.highlights.map((l) => para(run(l, { size: 18 }), { after: 40, keep: true })).join("") +
-    table(t, contentWidth) +
-    t.notes.map((n) => para(run(`Note: ${n}`, { size: 16, color: "57534E" }), { before: 60, after: 0 })).join("")).join("")
+    table(t, contentWidth)).join("")
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><w:body>' + head + body +
     `<w:sectPr><w:pgSz w:w="${w}" w:h="${h}"/><w:pgMar w:top="${MARGIN}" w:right="${MARGIN}" w:bottom="${MARGIN}" w:left="${MARGIN}" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>` +
@@ -129,10 +126,10 @@ export function zip(files: [string, string | Buffer][]): Buffer {
 }
 
 /** A .docx download response: the report as a Word document with editable tables. */
-export function docxResponse(filename: string, title: string, subtitle: string, office: string, tables: DocTable[], paper?: string) {
+export function docxResponse(filename: string, title: string, subtitle: string, tables: DocTable[], paper?: string) {
   const size = paper && paper in PAGES ? (paper as keyof typeof PAGES) : "short"
   const logos = LOGOS.map(([name]): [string, Buffer] => [`word/media/${name}`, readFileSync(join(process.cwd(), "public", name))])
-  const file = zip([...Object.entries(PARTS), ...logos, ["word/document.xml", documentXml(title, subtitle, office, tables, size)]])
+  const file = zip([...Object.entries(PARTS), ...logos, ["word/document.xml", documentXml(title, subtitle, tables, size)]])
   return new Response(new Uint8Array(file), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
