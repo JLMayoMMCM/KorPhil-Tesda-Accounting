@@ -317,6 +317,20 @@ export function paginate(blocks: number[][], h: { cap: number; start: number; ca
 export type SheetRow = { sheet_row: number; extra?: Record<string, string> } & Record<string, unknown>
 type FormColumn = { key: string; field: string | null; type: string; options: string[] }
 
+/** Form fields in sheet order, except a full-width field waits until the half-width field before it has a partner,
+ * so two half fields share a row instead of each sitting alone. DOM order = visual order, so Tab still reads top to bottom. */
+export function pairHalves<T>(fields: T[], isWide: (f: T) => boolean): T[] {
+  const out: T[] = [], held: T[] = []
+  let open = false // a half field is waiting for its partner
+  for (const f of fields) {
+    if (isWide(f)) { (open ? held : out).push(f); continue }
+    out.push(f)
+    open = !open
+    if (!open) out.push(...held.splice(0))
+  }
+  return [...out, ...held]
+}
+
 export const cellOf = (r: SheetRow, c: { key: string; field: string | null }) =>
   String((c.field ? r[c.field] : r.extra?.[c.key]) ?? "")
 

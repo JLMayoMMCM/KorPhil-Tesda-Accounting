@@ -13,6 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { pairHalves } from "@/lib/ledger"
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from "@/components/ui/input-group"
 import { Kbd } from "@/components/ui/kbd"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
@@ -50,6 +51,8 @@ export function RecordPanel({ row, initial, columns, heading, status, source, cl
   const [error, setError] = React.useState("")
   React.useEffect(() => () => setDirty(""), [setDirty]) // closing the panel drops the guard
   const shown = columns.filter((c) => c.visibility !== "hidden")
+  const isWide = (c: Column<string>) => c.type === "long" || wide.includes(c.key)
+  const laidOut = pairHalves(shown, isWide)
 
   const onInput = (e: React.FormEvent<HTMLFormElement>) => {
     const { name, value } = e.target as HTMLInputElement
@@ -135,8 +138,8 @@ export function RecordPanel({ row, initial, columns, heading, status, source, cl
       )}
 
       <FieldGroup className="grid grid-cols-2 gap-4">
-        {shown.map((c) => (
-          <Field key={c.key} className={c.type === "long" || wide.includes(c.key) ? "col-span-2" : undefined}>
+        {laidOut.map((c) => (
+          <Field key={c.key} className={isWide(c) ? "col-span-2" : undefined}>
             <FieldLabel htmlFor={c.key}>{c.label}{c.visibility === "readonly" && <span className="font-normal text-muted-foreground"> · read-only</span>}</FieldLabel>
             {field(c)}
           </Field>

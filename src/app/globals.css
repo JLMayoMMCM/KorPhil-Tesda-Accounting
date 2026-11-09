@@ -183,6 +183,14 @@
   [data-slot="native-select"]::picker-icon {
     display: none; /* NativeSelect draws its own chevron */
   }
+  /* In the record panel a value too long even for a full-width row wraps and the box grows, instead of hiding behind "…". */
+  [data-voucher-form] [data-slot="native-select"] {
+    height: auto;
+    min-height: 2rem;
+    white-space: normal;
+    text-overflow: clip;
+    line-height: 1.35;
+  }
   [data-slot="native-select"]::picker(select) {
     margin-block: 4px;
     padding: 4px;

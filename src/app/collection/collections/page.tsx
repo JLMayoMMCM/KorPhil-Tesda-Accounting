@@ -214,7 +214,7 @@ export default async function Collections({ searchParams }: PageProps<"/collecti
         remove={panelRow ? deleteEntry.bind(null, panelRow.sheet_row, sig) : undefined}
         removeNote={panelRow ? `Clears this entry's cells in row ${panelRow.sheet_row}. The row stays, and so do Deposit, Undeposited and the summary tables beside it. Undo from the sheet's version history.` : undefined}
         required={COLLECTION.required}
-        wide={["payor"]}
+        wide={["payor", "uacs", "nature"]}
       />
     )}
     </div>

@@ -2,7 +2,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 
-import { amountQuery, blank, byIssue, findRows, rowIndex, DV_FORMAT, enrich, formFromRow, freeDvNo, label, nextDvNo, filterRows, inTab, labelOf, median, monthsBack, paginate, parseAmount, parseDate, peso, qs, sameChoice, serialDate, sheetDate, total, rowSig, yearThrough, type RawVoucher } from "./ledger.ts"
+import { amountQuery, blank, byIssue, findRows, rowIndex, DV_FORMAT, enrich, formFromRow, freeDvNo, label, nextDvNo, filterRows, inTab, labelOf, median, monthsBack, pairHalves, paginate, parseAmount, parseDate, peso, qs, sameChoice, serialDate, sheetDate, total, rowSig, yearThrough, type RawVoucher } from "./ledger.ts"
 import { collected, COLLECTION, filterEntries, readCollections, type CollectionField } from "./collection.ts"
 import { bookRoles, classifyRow, colLetter, DISBURSEMENT, detectLayout, fixedLayout, HEADERS, headerSig, inferType, layoutDiff, META, metaKeys, normalize, pullPlan, readSheet, savedFrom } from "./sheet-config.ts"
 import { documentXml, zip } from "./docx.ts"
@@ -366,4 +366,13 @@ test("docx", () => {
   const z = zip([["word/document.xml", xml]]), size = z.readUInt32LE(18), name = z.readUInt16LE(26)
   assert.equal(z.readUInt32LE(0), 0x04034b50)
   assert.equal(inflateRawSync(z.subarray(30 + name, 30 + name + size)).toString(), xml) // the stored file comes back intact
+})
+
+test("pairHalves", () => {
+  const wide = (k: string) => k === k.toUpperCase()
+  const lay = (ks: string) => pairHalves([...ks], wide).join("")
+  assert.equal(lay("abPUcNd"), "abPUcdN") // collection panel: Area pairs with Collection, Nature after
+  assert.equal(lay("abPcd"), "abPcd") // already paired: unchanged
+  assert.equal(lay("aBc"), "acB") // a lone half pulls the next half up
+  assert.equal(lay("aB"), "aB") // nothing to pair with: order kept
 })
