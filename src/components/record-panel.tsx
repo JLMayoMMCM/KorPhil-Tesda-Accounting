@@ -119,7 +119,9 @@ export function RecordPanel({ row, initial, columns, heading, status, source, cl
 
   return (
     <form data-voucher-form onInput={onInput} onSubmit={onSubmit}
-      className="flex flex-col gap-4 rounded-xl border bg-card p-4 lg:sticky lg:top-16 lg:max-h-[calc(100svh-5rem)] lg:overflow-y-auto">
+      // Below lg the list has no side column, so the panel is a full-screen sheet over it instead of landing under 100 rows.
+      // z-40: above the sticky header (z-10), under dialogs and the save overlay (z-50).
+      className="flex flex-col gap-4 rounded-xl border bg-card p-4 max-lg:fixed max-lg:inset-0 max-lg:z-40 max-lg:overflow-y-auto max-lg:overscroll-contain max-lg:rounded-none max-lg:border-0 lg:sticky lg:top-16 lg:max-h-[calc(100svh-5rem)] lg:overflow-y-auto">
       <header className="flex items-start gap-2">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <h2 className="truncate font-heading text-lg font-semibold">{heading}</h2>

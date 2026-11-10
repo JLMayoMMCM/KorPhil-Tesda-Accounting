@@ -81,25 +81,45 @@ async function call(url: string, token: string | null, init: RequestInit = {}) {
   return response.json()
 }
 
-/** Finish the sentence "your Google account ..." for a failed Sheets call. */
-export function explain(exc: unknown): string {
-  if (!(exc instanceof SheetsError)) return `couldn't reach Google Sheets (${exc instanceof Error ? exc.message : exc}).`
-  if (exc.status === 403 && exc.body.includes("SERVICE_DISABLED"))
-    return "can't be used yet: turn on the Google Sheets API in the app's Google Cloud project."
-  if (exc.status === 403) return "doesn't have permission for this sheet. Ask the sheet owner to share it with you as Editor."
-  if (exc.status === 404) return "can't find the sheet. Check GOOGLE_SHEET_ID in .env.local."
-  if (exc.status === 401) return "sign-in has expired. Sign in again."
-  return `couldn't reach Google Sheets (${exc.message}).`
+/** Each way a Sheets call can fail, finishing the sentence "your Google account ...". */
+const ACCESS_MESSAGES = {
+  setup: "can't sign in yet: GOOGLE_SHEET_ID is not set in .env.local.",
+  api: "can't be used yet: turn on the Google Sheets API in the app's Google Cloud project.",
+  denied: "doesn't have permission for this sheet. Ask the sheet owner to share it with you as Editor.",
+  missing: "can't find the sheet. Check GOOGLE_SHEET_ID in .env.local.",
+  expired: "sign-in has expired. Sign in again.",
+  unreachable: "couldn't reach Google Sheets. Try again.",
+}
+type AccessCode = keyof typeof ACCESS_MESSAGES
+/** An error ending in this means the Google token stopped working: the page offers a way to sign in again. */
+export const SIGN_IN_AGAIN = ACCESS_MESSAGES.expired
+
+function accessCode(exc: unknown): AccessCode {
+  if (!(exc instanceof SheetsError)) return "unreachable"
+  if (exc.status === 403) return exc.body.includes("SERVICE_DISABLED") ? "api" : "denied"
+  return exc.status === 404 ? "missing" : exc.status === 401 ? "expired" : "unreachable"
 }
 
-/** Error text (to follow the user's email) if this token can't open the sheet, else null. */
-export async function checkAccess(token: string): Promise<string | null> {
-  if (!SHEET_ID) return "can't sign in yet: GOOGLE_SHEET_ID is not set in .env.local."
+/** The message for a code from the sign-in redirect (?error=access&detail=<code>). Only the app's own text ever shows, never the URL's. */
+export const accessMessage = (code: string) =>
+  ACCESS_MESSAGES[Object.hasOwn(ACCESS_MESSAGES, code) ? (code as AccessCode) : "unreachable"]
+
+/** Finish the sentence "your Google account ..." for a failed Sheets call. */
+export function explain(exc: unknown): string {
+  const code = accessCode(exc)
+  if (code !== "unreachable") return ACCESS_MESSAGES[code]
+  return `couldn't reach Google Sheets (${exc instanceof Error ? exc.message : exc}).`
+}
+
+/** A code for why this token can't open the sheet (see accessMessage), else null. */
+export async function checkAccess(token: string): Promise<AccessCode | null> {
+  if (!SHEET_ID) return "setup"
   try {
     await pullMeta("voucher", token)
     return null
   } catch (exc) {
-    return explain(exc)
+    console.error("Sheet access check failed at sign-in:", exc)
+    return accessCode(exc)
   }
 }
 

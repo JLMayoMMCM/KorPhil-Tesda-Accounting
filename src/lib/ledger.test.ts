@@ -6,6 +6,8 @@ import { amountQuery, blank, byIssue, findRows, rowIndex, DV_FORMAT, enrich, for
 import { collected, COLLECTION, filterEntries, readCollections, type CollectionField } from "./collection.ts"
 import { bookRoles, classifyRow, colLetter, DISBURSEMENT, detectLayout, fixedLayout, HEADERS, headerSig, inferType, layoutDiff, META, metaKeys, normalize, pullPlan, readSheet, savedFrom } from "./sheet-config.ts"
 import { documentXml, zip } from "./docx.ts"
+import { safeNext } from "./nav.ts"
+import { csvCell } from "./csv.ts"
 import { inflateRawSync } from "node:zlib"
 
 let n = 5
@@ -375,4 +377,24 @@ test("pairHalves", () => {
   assert.equal(lay("abPcd"), "abPcd") // already paired: unchanged
   assert.equal(lay("aBc"), "acB") // a lone half pulls the next half up
   assert.equal(lay("aB"), "aB") // nothing to pair with: order kept
+})
+
+test("safeNext", () => {
+  assert.equal(safeNext("/voucher/vouchers/?tab=review"), "/voucher/vouchers/?tab=review")
+  for (const bad of ["//evil.com", "/\\evil.com", "https://evil.com", "/\t/evil.com", "/\n/evil.com", "/\r\\evil.com", "", null])
+    assert.equal(safeNext(bad), "/", JSON.stringify(bad))
+})
+
+test("csvCell", () => {
+  // Formulas open as text in Excel.
+  assert.equal(csvCell('=HYPERLINK("https://evil.com","x")'), `"'=HYPERLINK(""https://evil.com"",""x"")"`)
+  assert.equal(csvCell("+cmd"), "'+cmd")
+  assert.equal(csvCell("-2+3"), "'-2+3")
+  assert.equal(csvCell("@SUM(A1)"), "'@SUM(A1)")
+  assert.equal(csvCell("\tx"), "'\tx")
+  // Amounts and ordinary text are untouched.
+  for (const ok of ["-1500.00", "-1500", "+5", "45%", "TESDA XI", "104434", "Juan dela Cruz - refund"]) assert.equal(csvCell(ok), ok)
+  assert.equal(csvCell("-12,500.00"), '"-12,500.00"') // a negative amount with a comma: quoted, not prefixed
+  assert.equal(csvCell(-1500), "-1500")
+  assert.equal(csvCell('say "hi", ok'), '"say ""hi"", ok"') // RFC 4180 quoting still applies
 })

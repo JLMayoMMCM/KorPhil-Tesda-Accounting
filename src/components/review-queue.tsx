@@ -23,7 +23,7 @@ type Done = { dv: string; sheetRow: number; newNo: string; key: Key; payee: stri
 type Same = Record<"payee" | "particulars" | "date" | "area" | "ref" | "amount", boolean>
 
 const GRID = "grid grid-cols-[16px_20px_60px_minmax(240px,1fr)_64px_200px_120px_84px] items-center gap-3 px-3"
-const PRIMARY = "bg-[#232a7c] text-white hover:bg-[#181e62] disabled:opacity-45"
+const PRIMARY = "bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-45"
 
 const refType = (ref: string) => (/^\d{7}$/.test(ref.trim()) ? "Check" : "ADA")
 const refText = (v: Voucher) => (v.check_number.trim() ? `${refType(v.check_number)} ${v.check_number.trim()}` : "—")
@@ -61,12 +61,12 @@ function analyze({ a, b }: Pair) {
 
 function DvNo({ dv, prefix }: { dv: string; prefix?: string }) {
   const cut = dv.lastIndexOf("-") + 1
-  return <span className="whitespace-nowrap"><span className={cn("text-[#676b86]", prefix)}>{dv.slice(0, cut)}</span><span className="font-bold">{dv.slice(cut)}</span></span>
+  return <span className="whitespace-nowrap"><span className={cn("text-muted-foreground", prefix)}>{dv.slice(0, cut)}</span><span className="font-bold">{dv.slice(cut)}</span></span>
 }
 
 function Verdict({ twice }: { twice: boolean }) {
   return (
-    <span className={cn("flex items-center gap-1 text-[12.5px] font-semibold whitespace-nowrap", twice ? "text-[#b42318]" : "text-[#4a4e6a]")}>
+    <span className={cn("flex items-center gap-1 text-[12.5px] font-semibold whitespace-nowrap", twice ? "text-destructive" : "text-muted-foreground")}>
       <CopyIcon className="size-3.5" />{twice ? "Likely entered twice" : "Two different vouchers"}
     </span>
   )
@@ -77,18 +77,18 @@ function Line({ v, k, s, action }: { v: Voucher; k?: string; s?: Same; action?: 
   return (
     <div className={cn(GRID, "py-1.5")}>
       <span />
-      {k ? <span className="flex size-5 items-center justify-center rounded-[4px] bg-[#eef0f7] text-[11px] font-bold text-[#4a4e6a]">{k}</span> : <span />}
-      <span className={cn("justify-self-start text-[13px] whitespace-nowrap text-[#4a4e6a]", mark(s?.date))}>{v.dv ? shortDate(v.dv) : "No date"}</span>
+      {k ? <span className="flex size-5 items-center justify-center rounded-[4px] bg-muted text-xs font-bold text-muted-foreground">{k}</span> : <span />}
+      <span className={cn("justify-self-start text-[13px] whitespace-nowrap text-muted-foreground", mark(s?.date))}>{v.dv ? shortDate(v.dv) : "No date"}</span>
       <div className="min-w-0">
         <div className="truncate text-[13px] font-medium">
           {!k && <span className="font-bold">{v.dv_no.trim() || "No DV #"} · </span>}
           <span className={mark(s?.payee)}>{v.payee || "—"}</span>
         </div>
-        <div className="mt-px truncate text-xs text-[#676b86]" title={v.particulars}>{v.particulars || "—"}</div>
+        <div className="mt-px truncate text-xs text-muted-foreground" title={v.particulars}>{v.particulars || "—"}</div>
       </div>
-      <span className={cn("justify-self-start text-[12.5px] font-medium text-[#4a4e6a]", mark(s?.area))}>{v.trade_area || "—"}</span>
+      <span className={cn("justify-self-start text-[12.5px] font-medium text-muted-foreground", mark(s?.area))}>{v.trade_area || "—"}</span>
       <div className="flex min-w-0 items-center gap-1.5">
-        <span className="w-9 flex-none text-[11px] font-semibold text-[#676b86]">{v.check_number.trim() && refType(v.check_number)}</span>
+        <span className="w-9 flex-none text-xs font-semibold text-muted-foreground">{v.check_number.trim() && refType(v.check_number)}</span>
         <span className={cn("truncate text-[13px]", mark(s?.ref))}>{v.check_number.trim() || "—"}</span>
       </div>
       <span className={cn("justify-self-end text-[13px] font-semibold whitespace-nowrap", mark(s?.amount))}>{peso(v.amount)}</span>
@@ -218,41 +218,41 @@ export function ReviewQueue({ pairs, others, areas, dvNos, today }: Props) {
   const pct = total ? Math.round((done.length / total) * 100) : 0
 
   return (
-    <div className="flex min-w-0 flex-col px-2 text-[#161830] tabular-nums">
+    <div className="flex min-w-0 flex-col px-2 text-popover-foreground tabular-nums">
       <div className="flex items-end gap-6 pt-1 pb-3.5">
         <div className="min-w-0">
           <h2 className="text-base font-bold tracking-[-0.005em]">Needs review</h2>
           {live.length > 0 && (
-            <p className="mt-0.5 text-[13px] whitespace-nowrap text-[#4a4e6a]">
+            <p className="mt-0.5 text-[13px] whitespace-nowrap text-muted-foreground">
               Duplicate DV # · {live.length} pair{live.length === 1 ? "" : "s"} · {live.length * 2} vouchers share a DV #
             </p>
           )}
         </div>
         {total > 0 && (
           <div className="ml-auto w-[220px] flex-none">
-            <div className="mb-1.5 flex justify-between text-xs font-semibold text-[#4a4e6a]"><span>{done.length} of {total} resolved</span><span>{pct}%</span></div>
-            <div className="h-1.5 overflow-hidden rounded-[3px] bg-[#eef0f7]" role="progressbar" aria-valuenow={pct} aria-label="Duplicate pairs resolved">
-              <div className="h-full rounded-[3px] bg-[#232a7c] transition-[width] duration-300" style={{ width: `${pct}%` }} />
+            <div className="mb-1.5 flex justify-between text-xs font-semibold text-muted-foreground"><span>{done.length} of {total} resolved</span><span>{pct}%</span></div>
+            <div className="h-1.5 overflow-hidden rounded-[3px] bg-muted" role="progressbar" aria-valuenow={pct} aria-label="Duplicate pairs resolved">
+              <div className="h-full rounded-[3px] bg-primary transition-[width] duration-300" style={{ width: `${pct}%` }} />
             </div>
           </div>
         )}
       </div>
 
       <div className="flex items-center gap-3 pb-3">
-        <div role="group" aria-label="Trade area" className="flex gap-0.5 rounded-md border border-[#cfd2e0] p-0.5">
+        <div role="group" aria-label="Trade area" className="flex gap-0.5 rounded-md border border-input p-0.5">
           {["All", ...areas].map((a) => (
             <button key={a} type="button" aria-pressed={area === a} onClick={() => setArea(a)}
-              className={cn("h-6 rounded-[4px] px-2.5 text-[12.5px] font-medium", area === a ? "bg-[#232a7c] text-white" : "text-[#4a4e6a] hover:bg-[#eef0f7]")}>
+              className={cn("h-6 rounded-[4px] px-2.5 text-[12.5px] font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50", area === a ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent")}>
               {a}
             </button>
           ))}
         </div>
-        {live.length > 0 && <span className="ml-auto text-xs text-[#676b86]">Grouped by DV # · newest first · click a pair to compare</span>}
+        {live.length > 0 && <span className="ml-auto text-xs text-muted-foreground">Grouped by DV # · newest first · click a pair to compare</span>}
       </div>
 
       <div className="max-xl:overflow-x-auto">
         <div className="min-w-[920px]">
-          <div className={cn(GRID, "sticky top-[49px] z-[5] h-8 rounded-md bg-[#f6f7fb] text-xs font-semibold text-[#4a4e6a]")}>
+          <div className={cn(GRID, "sticky top-[49px] z-[5] h-8 rounded-md bg-muted text-xs font-semibold text-muted-foreground")}>
             <span /><span /><span>Date</span><span>Payee · particulars</span><span>Area</span><span>Check / ADA #</span><span className="text-right">Amount</span><span />
           </div>
 
@@ -261,16 +261,16 @@ export function ReviewQueue({ pairs, others, areas, dvNos, today }: Props) {
             const on = p.dv === selected || checked.has(p.dv)
             return (
               <div key={p.dv} data-dv={p.dv} onClick={() => show(p.dv)}
-                className={cn("cursor-pointer border-b border-[#e3e5ee] pb-2", on ? "bg-[#e7e9f8]" : "hover:bg-[#f6f7fb]")}>
+                className={cn("cursor-pointer border-b border-border pb-2", on ? "bg-primary/10" : "hover:bg-muted")}>
                 <div className="grid grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-3 px-3 pt-3 pb-1">
                   <span className="flex" onClick={(e) => e.stopPropagation()}>
                     <Checkbox checked={checked.has(p.dv)} onCheckedChange={(c) => toggle(p.dv, c)} aria-label={`Select ${p.dv}`}
-                      className="data-checked:border-[#232a7c] data-checked:bg-[#232a7c]" />
+                      className="data-checked:border-primary data-checked:bg-primary" />
                   </span>
                   <div className="flex min-w-0 items-center gap-2.5">
                     <span className="text-[13px]"><DvNo dv={p.dv} /></span>
                     <Verdict twice={an.twice} />
-                    <span className="min-w-0 truncate text-[12.5px] text-[#4a4e6a]">{an.summary}</span>
+                    <span className="min-w-0 truncate text-[12.5px] text-muted-foreground">{an.summary}</span>
                   </div>
                   <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); show(p.dv) }}>Compare</Button>
                 </div>
@@ -281,22 +281,22 @@ export function ReviewQueue({ pairs, others, areas, dvNos, today }: Props) {
           })}
 
           {live.length > 0 && !visible.length && (
-            <p className="py-10 text-center text-[13px] text-[#4a4e6a]">
+            <p className="py-10 text-center text-[13px] text-muted-foreground">
               No open pairs match this filter.{" "}
-              <button type="button" className="font-semibold text-[#232a7c]" onClick={() => { setArea("All"); if (q) router.replace("/voucher/workspace/") }}>Clear filters</button>
+              <button type="button" className="font-semibold text-primary" onClick={() => { setArea("All"); if (q) router.replace("/voucher/workspace/") }}>Clear filters</button>
             </p>
           )}
 
           {done.length > 0 && (
             <section className="pt-6">
-              <h3 className="mb-2 text-xs font-semibold text-[#4a4e6a]">Resolved this session · {done.length}</h3>
-              <ul className="border-t border-[#e3e5ee]">
+              <h3 className="mb-2 text-xs font-semibold text-muted-foreground">Resolved this session · {done.length}</h3>
+              <ul className="border-t border-border">
                 {done.map((d) => (
-                  <li key={`${d.sheetRow}-${d.newNo}`} className="flex h-[38px] items-center gap-3 border-b border-[#e3e5ee] px-3 text-[13px]">
+                  <li key={`${d.sheetRow}-${d.newNo}`} className="flex h-[38px] items-center gap-3 border-b border-border px-3 text-[13px]">
                     <CheckIcon className="size-3.5 flex-none text-[#1b7a45]" />
                     <span className="font-semibold">{d.dv}</span>
-                    <span className="min-w-0 truncate text-[#4a4e6a]">Renumbered to {d.newNo} · {d.key.toUpperCase()} · {d.payee || "—"} · {peso(d.amount)}</span>
-                    <button type="button" className="ml-auto font-semibold text-[#232a7c] hover:underline" onClick={() => undo([d])}>Undo</button>
+                    <span className="min-w-0 truncate text-muted-foreground">Renumbered to {d.newNo} · {d.key.toUpperCase()} · {d.payee || "—"} · {peso(d.amount)}</span>
+                    <button type="button" className="ml-auto font-semibold text-primary hover:underline" onClick={() => undo([d])}>Undo</button>
                   </li>
                 ))}
               </ul>
@@ -309,12 +309,12 @@ export function ReviewQueue({ pairs, others, areas, dvNos, today }: Props) {
             return (
               <details key={title} open={rows.length <= 10} className="pt-6">
                 <summary className="flex cursor-pointer items-center gap-2 px-3 pb-2 text-[13px] font-semibold">
-                  {title}<span className="font-normal text-[#4a4e6a]">{rows.length}</span>
-                  <Link href={`/voucher/vouchers/?issue=${issue}`} className="ml-auto text-[12.5px] font-normal text-[#232a7c] hover:underline">Open in Vouchers</Link>
+                  {title}<span className="font-normal text-muted-foreground">{rows.length}</span>
+                  <Link href={`/voucher/vouchers/?issue=${issue}`} className="ml-auto text-[12.5px] font-normal text-primary hover:underline">Open in Vouchers</Link>
                 </summary>
-                <div className="border-t border-[#e3e5ee]">
+                <div className="border-t border-border">
                   {rows.map((v) => (
-                    <div key={v.sheet_row} className="border-b border-[#e3e5ee] hover:bg-[#f6f7fb]">
+                    <div key={v.sheet_row} className="border-b border-border hover:bg-muted">
                       <Line v={v} action={
                         <Button variant="outline" size="sm" className="justify-self-end" title="Open in Vouchers"
                           render={<Link href={`/voucher/vouchers/?open=${v.sheet_row}`} />} nativeButton={false}>Open</Button>
@@ -331,19 +331,19 @@ export function ReviewQueue({ pairs, others, areas, dvNos, today }: Props) {
       {picked.length > 0 && (
         <div className="pointer-events-none sticky bottom-4 z-10 mt-4 flex justify-center">
           <div role="region" aria-label="Selection"
-            className="pointer-events-auto flex items-center gap-2 rounded-lg bg-[#232a7c] py-2 pr-2 pl-4 text-[13px] text-white shadow-[0_10px_30px_rgb(22_24_48/.25)]">
+            className="pointer-events-auto flex items-center gap-2 rounded-lg bg-primary py-2 pr-2 pl-4 text-[13px] text-primary-foreground shadow-xl">
             <span className="mr-2 font-semibold">{picked.length} pair{picked.length === 1 ? "" : "s"} selected</span>
-            <Button size="sm" className="bg-white text-[#232a7c] hover:bg-white/90" onClick={giveEach}>Give each a new DV #</Button>
-            <Button size="sm" variant="ghost" className="text-white hover:bg-white/10 hover:text-white" onClick={() => setChecked(new Set())}>Clear</Button>
+            <Button size="sm" className="bg-primary-foreground text-primary hover:bg-primary-foreground/90" onClick={giveEach}>Give each a new DV #</Button>
+            <Button size="sm" variant="ghost" className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground" onClick={() => setChecked(new Set())}>Clear</Button>
           </div>
         </div>
       )}
 
       <Dialog.Root open={open && !!sel} onOpenChange={(o) => { if (!o) setOpen(false) }}>
         <Dialog.Portal>
-          <Dialog.Backdrop className="fixed inset-0 z-50 bg-[rgb(22_24_48/.32)] backdrop-blur-[3px] transition-opacity duration-200 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0" />
+          <Dialog.Backdrop className="fixed inset-0 z-50 bg-foreground/30 backdrop-blur-[3px] transition-opacity duration-200 ease-out data-ending-style:opacity-0 data-starting-style:opacity-0" />
           <Dialog.Popup
-            className="fixed inset-y-0 right-0 z-50 flex w-[540px] max-w-full flex-col bg-white text-[#161830] tabular-nums shadow-[0_20px_50px_rgb(22_24_48/.3)] outline-none transition-transform duration-[240ms] ease-[cubic-bezier(.2,.8,.2,1)] data-ending-style:translate-x-full data-starting-style:translate-x-full"
+            className="fixed inset-y-0 right-0 z-50 flex w-[540px] max-w-full flex-col bg-popover text-popover-foreground tabular-nums shadow-2xl outline-none transition-transform duration-[240ms] ease-[cubic-bezier(.2,.8,.2,1)] data-ending-style:translate-x-full data-starting-style:translate-x-full"
             onKeyDown={(e) => {
               if (!sel || e.ctrlKey || e.metaKey || e.altKey || (e.target as Element).closest("input")) return
               const k = e.key.toLowerCase()
@@ -397,16 +397,16 @@ function Compare({ pair: p, pos, count, target, auto, typed, today, problem, onT
     ["Check / ADA #", an.s.ref, refText(p.a), refText(p.b)],
     ["Amount", an.s.amount, peso(p.a.amount), peso(p.b.amount)],
   ]
-  const cmpRow = "grid grid-cols-[96px_minmax(0,1fr)_minmax(0,1fr)] gap-3 border-b border-[#e3e5ee] px-3 py-[9px] text-[13px]"
+  const cmpRow = "grid grid-cols-[96px_minmax(0,1fr)_minmax(0,1fr)] gap-3 border-b border-border px-3 py-[9px] text-[13px]"
 
   return (
     <>
-      <div className="flex h-14 flex-none items-center gap-2 border-b border-[#e3e5ee] pr-3 pl-6">
-        <span className="text-xs font-semibold whitespace-nowrap text-[#4a4e6a]">Duplicate DV # · pair {pos} of {count}</span>
+      <div className="flex h-14 flex-none items-center gap-2 border-b border-border pr-3 pl-6">
+        <span className="text-xs font-semibold whitespace-nowrap text-muted-foreground">Duplicate DV # · pair {pos} of {count}</span>
         <div className="ml-auto flex items-center gap-1">
           <Button variant="ghost" size="icon" aria-label="Previous pair" title="Previous (K)" onClick={() => onMove(-1)}><ChevronUpIcon /></Button>
           <Button variant="ghost" size="icon" aria-label="Next pair" title="Next (J)" onClick={() => onMove(1)}><ChevronDownIcon /></Button>
-          <span className="mx-1 h-5 w-px bg-[#e3e5ee]" />
+          <span className="mx-1 h-5 w-px bg-border" />
           <Dialog.Close render={<Button variant="ghost" aria-label="Close" title="Close (Esc)" />}><Kbd>Esc</Kbd><XIcon /></Dialog.Close>
         </div>
       </div>
@@ -414,30 +414,30 @@ function Compare({ pair: p, pos, count, target, auto, typed, today, problem, onT
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto px-6 pt-5 pb-6">
         <div>
           <div className="flex flex-wrap items-center gap-2.5">
-            <Dialog.Title className="text-[22px] font-bold tracking-[-0.01em]"><DvNo dv={p.dv} prefix="font-semibold" /></Dialog.Title>
+            <Dialog.Title className="text-xl font-bold tracking-tight"><DvNo dv={p.dv} prefix="font-semibold" /></Dialog.Title>
             <Verdict twice={an.twice} />
           </div>
-          <Dialog.Description className="mt-2 text-sm leading-normal text-pretty text-[#4a4e6a]">{an.explain}</Dialog.Description>
+          <Dialog.Description className="mt-2 text-sm leading-normal text-pretty text-muted-foreground">{an.explain}</Dialog.Description>
         </div>
 
         <div>
-          <div className="grid h-8 grid-cols-[96px_minmax(0,1fr)_minmax(0,1fr)] items-center gap-3 rounded-md bg-[#f6f7fb] px-3 text-xs font-semibold text-[#4a4e6a]">
+          <div className="grid h-8 grid-cols-[96px_minmax(0,1fr)_minmax(0,1fr)] items-center gap-3 rounded-md bg-muted px-3 text-xs font-semibold text-muted-foreground">
             <span /><span>A · {p.a.dv ? shortDate(p.a.dv) : "No date"}</span><span>B · {p.b.dv ? shortDate(p.b.dv) : "No date"}</span>
           </div>
           <div className={cmpRow}>
-            <span className="flex flex-col gap-px"><span className="text-[12.5px] font-medium text-[#4a4e6a]">DV #</span><span className="text-[11px] font-semibold text-[#232a7c]">{K} will change</span></span>
+            <span className="flex flex-col gap-px"><span className="text-[12.5px] font-medium text-muted-foreground">DV #</span><span className="text-xs font-semibold text-primary">{K} will change</span></span>
             {(["a", "b"] as Key[]).map((k) => (
               <span key={k} className="flex flex-col">
-                <span className={k === target ? "text-[#676b86] line-through" : ""}>{p.dv}</span>
-                {k === target && !err && <span className="font-bold text-[#232a7c]">{no}</span>}
+                <span className={k === target ? "text-muted-foreground line-through" : ""}>{p.dv}</span>
+                {k === target && !err && <span className="font-bold text-primary">{no}</span>}
               </span>
             ))}
           </div>
           {fields.map(([name, ok, x, y]) => (
             <div key={name} className={cn(cmpRow, !ok && "bg-[#fbf0dc] font-semibold")}>
               <span className="flex flex-col gap-px">
-                <span className="text-[12.5px] font-medium text-[#4a4e6a]">{name}</span>
-                <span className={cn("text-[11px] font-semibold", ok ? "text-[#676b86]" : "text-[#8a5200]")}>{ok ? "Same" : "Differs"}</span>
+                <span className="text-[12.5px] font-medium text-muted-foreground">{name}</span>
+                <span className={cn("text-xs font-semibold", ok ? "text-muted-foreground" : "text-[#8a5200]")}>{ok ? "Same" : "Differs"}</span>
               </span>
               <span className="break-words">{x}</span>
               <span className="break-words">{y}</span>
@@ -452,12 +452,12 @@ function Compare({ pair: p, pos, count, target, auto, typed, today, problem, onT
               const on = target === k, w = p[k]
               return (
                 <button key={k} type="button" role="radio" aria-checked={on} onClick={() => onTarget(k)}
-                  className={cn("flex min-w-0 items-center gap-2.5 rounded-md border px-3 py-2.5 text-left", on ? "border-[#232a7c] bg-[#e7e9f8]" : "border-[#cfd2e0] hover:bg-[#f6f7fb]")}>
-                  <span className={cn("flex size-4 flex-none items-center justify-center rounded-full border", on ? "border-[#232a7c]" : "border-[#cfd2e0]")}>
-                    {on && <span className="size-2 rounded-full bg-[#232a7c]" />}
+                  className={cn("flex min-w-0 items-center gap-2.5 rounded-md border px-3 py-2.5 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50", on ? "border-primary bg-primary/10" : "border-input hover:bg-muted")}>
+                  <span className={cn("flex size-4 flex-none items-center justify-center rounded-full border", on ? "border-primary" : "border-input")}>
+                    {on && <span className="size-2 rounded-full bg-primary" />}
                   </span>
                   <span className="flex min-w-0 flex-col gap-px">
-                    <span className={cn("text-xs font-bold", on ? "text-[#232a7c]" : "text-[#4a4e6a]")}>
+                    <span className={cn("text-xs font-bold", on ? "text-primary" : "text-muted-foreground")}>
                       {k.toUpperCase()} · {w.dv ? shortDate(w.dv) : "No date"} · {label(w, "trade_area")}
                     </span>
                     <span className="truncate text-[13px]">{w.payee || "—"}</span>
@@ -471,25 +471,25 @@ function Compare({ pair: p, pos, count, target, auto, typed, today, problem, onT
 
         <div className="flex flex-col gap-1.5">
           <div className="flex items-baseline gap-2">
-            <label htmlFor="new-dv" className="text-[12.5px] font-medium text-[#4a4e6a]">New DV # for {K}</label>
+            <label htmlFor="new-dv" className="text-[12.5px] font-medium text-muted-foreground">New DV # for {K}</label>
             {edited && (
-              <button type="button" className="ml-auto text-[12.5px] font-semibold text-[#232a7c]" onClick={() => onType(null)}>Use next available ({auto})</button>
+              <button type="button" className="ml-auto text-[12.5px] font-semibold text-primary" onClick={() => onType(null)}>Use next available ({auto})</button>
             )}
           </div>
           <Input id="new-dv" value={no} spellCheck={false} autoComplete="off" aria-invalid={!!err} aria-describedby="new-dv-note"
             className="h-9 text-sm font-semibold" onChange={(e) => onType(e.target.value.trim())}
             onKeyDown={(e) => { if (e.key === "Enter" && !err) onGive() }} />
-          <p id="new-dv-note" className={cn("text-[12.5px]", err ? "font-medium text-[#b42318]" : "text-[#676b86]")}>{err || help}</p>
+          <p id="new-dv-note" className={cn("text-[12.5px]", err ? "font-medium text-destructive" : "text-muted-foreground")}>{err || help}</p>
         </div>
       </div>
 
-      <div className="flex flex-none items-center gap-2 border-t border-[#e3e5ee] px-6 py-3">
+      <div className="flex flex-none items-center gap-2 border-t border-border px-6 py-3">
         <Button variant="ghost" onClick={() => onMove(1)}>Skip</Button>
         <Button variant="outline" className="ml-auto" render={<Link href={`/voucher/vouchers/?open=${v.sheet_row}`} />} nativeButton={false}>
           Open {K} in Vouchers<Kbd>O</Kbd>
         </Button>
         <Button className={PRIMARY} disabled={!!err} onClick={onGive}>
-          Give {K} {err ? "a new DV #" : no}<Kbd className="bg-white/15 text-white">R</Kbd>
+          Give {K} {err ? "a new DV #" : no}<Kbd className="bg-primary-foreground/15 text-primary-foreground">R</Kbd>
         </Button>
       </div>
     </>

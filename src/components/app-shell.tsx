@@ -1,8 +1,11 @@
 import { CircleAlertIcon } from "lucide-react"
 import { cookies } from "next/headers"
 
+import { signOut } from "@/app/actions"
 import { AppUI } from "@/components/app-ui"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
+import { SIGN_IN_AGAIN } from "@/lib/sheets"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { Toaster } from "@/components/ui/toast"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -26,6 +29,12 @@ export async function AppShell({ sidebar, header, error, children }: Props) {
                 <Alert variant="destructive" className="mx-4 mt-4 w-auto">
                   <CircleAlertIcon />
                   <AlertDescription>{error}</AlertDescription>
+                  {/* The token was revoked or went bad mid-session: signing out clears it and lands on the sign-in page. */}
+                  {error.endsWith(SIGN_IN_AGAIN) && (
+                    <AlertAction>
+                      <form action={signOut}><Button type="submit" size="sm" variant="outline">Sign in again</Button></form>
+                    </AlertAction>
+                  )}
                 </Alert>
               )}
               <div className="flex flex-1 flex-col p-4 print:p-0">{children}</div>

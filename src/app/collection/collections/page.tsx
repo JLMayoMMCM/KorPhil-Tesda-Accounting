@@ -28,7 +28,7 @@ const BASE = "/collection/collections/"
 /** Every receipt on the Collection tab, newest first, with the same filters the dashboard links to. A row opens in the side panel to edit or delete; ?new opens a blank one. */
 export default async function Collections({ searchParams }: PageProps<"/collection/collections">) {
   const params = toParams(await searchParams)
-  const { entries, rows, columns, title, at, today } = await getCollectionData()
+  const { entries, rows, columns, title, at, today, error } = await getCollectionData()
   // "Needs review": receipts with any flag.
   const view = params.get("issue") === "any" ? "review" : ""
   const shown = filterEntries(entries, params)
@@ -74,7 +74,7 @@ export default async function Collections({ searchParams }: PageProps<"/collecti
         })}
         <Form action={BASE} role="search" className="ml-auto flex items-center gap-2">
           {[...params].filter(([k]) => k !== "q" && k !== "page").map(([k, v]) => <input key={k + v} type="hidden" name={k} value={v} />)}
-          <Input type="search" name="q" defaultValue={q ?? ""} placeholder="Find OR #, payor, or amount (>5000)" aria-label="Find entries by OR #, payor, nature, or amount" className="h-8 w-64" />
+          <Input type="search" name="q" key={q ?? ""} defaultValue={q ?? ""} placeholder="Find OR #, payor, or amount (>5000)" aria-label="Find entries by OR #, payor, nature, or amount" className="h-8 w-64" />
         </Form>
         <Popover>
           <PopoverTrigger render={<Button variant="outline" size="sm" />}>
@@ -140,7 +140,8 @@ export default async function Collections({ searchParams }: PageProps<"/collecti
                 const openUrl = BASE + qs(params, { open: String(e.sheet_row), new: null })
                 return (
                 <LinkRow key={e.sheet_row} href={openUrl} data-state={panelEntry?.sheet_row === e.sheet_row ? "selected" : undefined}>
-                  <TableCell className="align-top whitespace-nowrap">
+                  {/* The date may wrap on phones so the amount column stays on screen. */}
+                  <TableCell className="align-top whitespace-normal sm:whitespace-nowrap">
                     {/* No prefetch: a page of rows would be a page of requests. */}
                     <Link className="hover:underline" href={openUrl} scroll={false} prefetch={false}>{longDate(e.iso)}</Link>
                     <div className="text-xs text-muted-foreground tabular-nums">{e.or_no || "No OR #"} · row {e.sheet_row}</div>
@@ -185,7 +186,8 @@ export default async function Collections({ searchParams }: PageProps<"/collecti
             </nav>
           )}
         </>
-      ) : (
+      ) : !error && (
+        // A failed read isn't an empty ledger: the shell's error banner says what happened instead.
         <Empty>
           <EmptyHeader>
             <EmptyMedia variant="icon"><SearchXIcon /></EmptyMedia>

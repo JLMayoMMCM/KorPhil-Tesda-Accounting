@@ -7,6 +7,7 @@ import { redirect } from "next/navigation"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { safeNext } from "@/lib/nav"
 import { SESSION_COOKIE, unseal } from "@/lib/session"
+import { accessMessage } from "@/lib/sheets"
 
 import { GoogleButton } from "./google-button"
 import { SealRings } from "./seal-rings"
@@ -29,7 +30,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const sp = await searchParams
   const one = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : "")
   const code = one("error")
-  const error = code === "access" ? `That Google account ${one("detail")}` : ERRORS[code] ?? (code ? ERRORS.failed : "")
+  const error = code === "access" ? `That Google account ${accessMessage(one("detail"))}` : ERRORS[code] ?? (code ? ERRORS.failed : "")
 
   if (!error && (await unseal((await cookies()).get(SESSION_COOKIE)?.value))) redirect(safeNext(one("next")))
 

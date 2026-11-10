@@ -9,9 +9,10 @@ export const HOME = "/"
 export const VOUCHER_HOME = "/voucher/dashboard/"
 export const COLLECTION_HOME = "/collection/dashboard/"
 
-/** Only same-site paths ("/voucher/vouchers/?tab=review"), never "//evil.com" or "https://…". */
+/** Only same-site paths ("/voucher/vouchers/?tab=review"), never "//evil.com" or "https://…".
+ * Control characters are refused too: URL parsers drop tabs/newlines, so "/\t/evil.com" would become "//evil.com". */
 export const safeNext = (url: string | null | undefined, fallback = HOME) =>
-  url && url.startsWith("/") && !url.startsWith("//") && !url.startsWith("/\\") ? url : fallback
+  url && url.startsWith("/") && !url.startsWith("//") && !url.startsWith("/\\") && !/[\x00-\x1f\x7f]/.test(url) ? url : fallback
 
 export type NavItem = { title: string; href: string; icon: LucideIcon; tabs?: true }
 
