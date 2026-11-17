@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import { deleteEntry, saveEntry } from "@/app/actions"
 import { account, COLLECTION, collected, ENTRY_ISSUES, entryMonths, filterEntries, tags, type EntryIssue } from "@/lib/collection"
 import { clock, getCollectionData } from "@/lib/data"
-import { formFromRow, longDate, monthLabel, peso, qs, rowSig, toParams } from "@/lib/ledger"
+import { formFromRow, longDate, monthLabel, shortDate, peso, qs, rowSig, toParams } from "@/lib/ledger"
 import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = { title: "Collections · Collections" }
@@ -140,11 +140,14 @@ export default async function Collections({ searchParams }: PageProps<"/collecti
                 const openUrl = BASE + qs(params, { open: String(e.sheet_row), new: null })
                 return (
                 <LinkRow key={e.sheet_row} href={openUrl} data-state={panelEntry?.sheet_row === e.sheet_row ? "selected" : undefined}>
-                  {/* The date may wrap on phones so the amount column stays on screen. */}
-                  <TableCell className="align-top whitespace-normal sm:whitespace-nowrap">
+                  {/* Phones get the short date and no row # so the cell stays one line and the amount stays on screen. */}
+                  <TableCell className="align-top">
                     {/* No prefetch: a page of rows would be a page of requests. */}
-                    <Link className="hover:underline" href={openUrl} scroll={false} prefetch={false}>{longDate(e.iso)}</Link>
-                    <div className="text-xs text-muted-foreground tabular-nums">{e.or_no || "No OR #"} · row {e.sheet_row}</div>
+                    <Link className="hover:underline" href={openUrl} scroll={false} prefetch={false}>
+                      <span className="sm:hidden">{shortDate(e.iso)}, {e.iso.slice(0, 4)}</span>
+                      <span className="max-sm:hidden">{longDate(e.iso)}</span>
+                    </Link>
+                    <div className="text-xs text-muted-foreground tabular-nums">{e.or_no || "No OR #"}<span className="max-sm:hidden"> · row {e.sheet_row}</span></div>
                   </TableCell>
                   <TableCell className="align-top whitespace-normal">
                     <div className="font-medium">{e.payor || "—"}</div>

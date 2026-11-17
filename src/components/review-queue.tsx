@@ -219,17 +219,17 @@ export function ReviewQueue({ pairs, others, areas, dvNos, today }: Props) {
 
   return (
     <div className="flex min-w-0 flex-col px-2 text-popover-foreground tabular-nums">
-      <div className="flex items-end gap-6 pt-1 pb-3.5">
-        <div className="min-w-0">
+      <div className="flex flex-wrap items-end gap-x-6 gap-y-3 pt-1 pb-3.5">
+        <div className="min-w-0 flex-1 basis-64">
           <h2 className="text-base font-bold tracking-[-0.005em]">Needs review</h2>
           {live.length > 0 && (
-            <p className="mt-0.5 text-[13px] whitespace-nowrap text-muted-foreground">
+            <p className="mt-0.5 text-[13px] text-muted-foreground">
               Duplicate DV # · {live.length} pair{live.length === 1 ? "" : "s"} · {live.length * 2} vouchers share a DV #
             </p>
           )}
         </div>
         {total > 0 && (
-          <div className="ml-auto w-[220px] flex-none">
+          <div className="w-[220px] flex-none max-sm:w-full">
             <div className="mb-1.5 flex justify-between text-xs font-semibold text-muted-foreground"><span>{done.length} of {total} resolved</span><span>{pct}%</span></div>
             <div className="h-1.5 overflow-hidden rounded-[3px] bg-muted" role="progressbar" aria-valuenow={pct} aria-label="Duplicate pairs resolved">
               <div className="h-full rounded-[3px] bg-primary transition-[width] duration-300" style={{ width: `${pct}%` }} />
@@ -247,12 +247,13 @@ export function ReviewQueue({ pairs, others, areas, dvNos, today }: Props) {
             </button>
           ))}
         </div>
-        {live.length > 0 && <span className="ml-auto text-xs text-muted-foreground">Grouped by DV # · newest first · click a pair to compare</span>}
+        {live.length > 0 && <span className="ml-auto text-xs text-muted-foreground max-md:hidden">Grouped by DV # · newest first · click a pair to compare</span>}
       </div>
 
       <div className="max-xl:overflow-x-auto">
         <div className="min-w-[920px]">
-          <div className={cn(GRID, "sticky top-[49px] z-[5] h-8 rounded-md bg-muted text-xs font-semibold text-muted-foreground")}>
+          {/* Below xl the wrapper scrolls sideways and becomes the sticky container, so the 49px header offset only applies at xl. */}
+          <div className={cn(GRID, "sticky top-0 xl:top-[49px] z-[5] h-8 rounded-md bg-muted text-xs font-semibold text-muted-foreground")}>
             <span /><span /><span>Date</span><span>Payee · particulars</span><span>Area</span><span>Check / ADA #</span><span className="text-right">Amount</span><span />
           </div>
 

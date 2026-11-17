@@ -5,7 +5,6 @@ import Link from "next/link"
 
 import { signOut } from "@/app/actions"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { getSession } from "@/lib/data"
 import { COLLECTION_HOME, VOUCHER_HOME } from "@/lib/nav"
@@ -26,7 +25,6 @@ const MODULES = [
     text: "Track collections and official receipts.",
     icon: ClipboardListIcon,
     href: COLLECTION_HOME,
-    soon: true,
   },
 ]
 
@@ -66,7 +64,7 @@ export default async function Portal() {
         </div>
 
         <ul className="grid gap-4 sm:grid-cols-2">
-          {MODULES.map(({ title, text, icon: Icon, href, soon }) => (
+          {MODULES.map(({ title, text, icon: Icon, href }) => (
             <li key={title}>
               <Link href={href} className="group flex h-full flex-col gap-4 rounded-xl border bg-card p-5 text-card-foreground shadow-xs transition-colors hover:border-primary/50 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
                 <span className="flex size-11 items-center justify-center rounded-lg bg-sidebar text-sidebar-foreground">
@@ -75,7 +73,6 @@ export default async function Portal() {
                 <span className="flex flex-col gap-1">
                   <span className="flex items-center gap-2 font-heading text-lg font-semibold">
                     {title}
-                    {soon && <Badge variant="secondary">Coming soon</Badge>}
                   </span>
                   <span className="text-sm text-muted-foreground">{text}</span>
                 </span>

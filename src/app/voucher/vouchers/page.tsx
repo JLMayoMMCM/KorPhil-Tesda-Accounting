@@ -139,29 +139,40 @@ export default async function Vouchers({ searchParams }: PageProps<"/voucher/vou
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className={cn("w-8", panel && "hidden")}><SelectAll /></TableHead>
-                  <TableHead>DV # · date</TableHead>
-                  <TableHead className="w-full">Payee · particulars</TableHead>
+                  <TableHead className={cn("w-8 max-sm:hidden", panel && "hidden")}><SelectAll /></TableHead>
+                  <TableHead className="max-sm:w-full">DV # · date</TableHead>
+                  <TableHead className="w-full max-sm:hidden">Payee · particulars</TableHead>
                   <TableHead className={wide}>Area · program · category</TableHead>
                   <TableHead className={wide}>Check #</TableHead>
                   {extras.map((c) => <TableHead key={c.key} className={cn(wide, c.type === "money" && "text-right")}>{c.label}</TableHead>)}
                   <TableHead className="text-right">Amount</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead className="max-sm:hidden">Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {pageRows.map((r) => {
                   const openUrl = "/voucher/vouchers/" + qs(params, { open: String(r.sheet_row), new: null })
                   const kind = [r.diploma_st_assessment, r.category].filter(Boolean).join(" · ")
+                  const status = (
+                    <div className="flex flex-col items-start gap-1">
+                      {isVerified(r)
+                        ? <Badge variant="outline" className="border-primary/40 text-primary"><BadgeCheckIcon data-icon="inline-start" />{VERIFIED}</Badge>
+                        : <span className="whitespace-nowrap text-muted-foreground">{r.status.trim() || FOR_REVIEW}</span>}
+                      {r.issues.length > 0 && <IssueBadges issues={r.issues} />}
+                    </div>
+                  )
                   return (
                     <LinkRow key={r.sheet_row} href={openUrl} data-state={panelRow?.sheet_row === r.sheet_row ? "selected" : undefined}>
-                      <TableCell className={cn(panel && "hidden")}><RowCheck row={r.sheet_row} label={r.dv_no} /></TableCell>
-                      <TableCell>
+                      <TableCell className={cn("max-sm:hidden", panel && "hidden")}><RowCheck row={r.sheet_row} label={r.dv_no} /></TableCell>
+                      {/* Phones stack payee and status under the DV # so the amount stays on screen without sideways scrolling. */}
+                      <TableCell className="max-sm:w-full max-sm:max-w-0">
                         {/* No prefetch: a page of rows would be a page of requests. */}
                         <Link className="font-medium hover:underline" href={openUrl} scroll={false} prefetch={false}>{r.dv_no || "Untitled DV"}</Link>
+                        <div className="truncate sm:hidden" title={r.payee}>{r.payee || "—"}</div>
                         <div className="text-xs text-muted-foreground">{(r.dv ? longDate(r.dv) : r.dv_date) || "No date"}</div>
+                        <div className="mt-1.5 sm:hidden">{status}</div>
                       </TableCell>
-                      <TableCell className="w-full max-w-0">
+                      <TableCell className="w-full max-w-0 max-sm:hidden">
                         <div className="truncate" title={r.payee}>{r.payee || "—"}</div>
                         <div className="truncate text-xs text-muted-foreground" title={r.particulars}>{r.particulars || "—"}</div>
                       </TableCell>
@@ -179,21 +190,15 @@ export default async function Vouchers({ searchParams }: PageProps<"/voucher/vou
                         )
                       })}
                       <TableCell className="text-right font-medium tabular-nums">{peso(r.amount)}</TableCell>
-                      <TableCell className="max-w-56 whitespace-normal">
-                        <div className="flex flex-col items-start gap-1">
-                          {isVerified(r)
-                            ? <Badge variant="outline" className="border-primary/40 text-primary"><BadgeCheckIcon data-icon="inline-start" />{VERIFIED}</Badge>
-                            : <span className="whitespace-nowrap text-muted-foreground">{r.status.trim() || FOR_REVIEW}</span>}
-                          {r.issues.length > 0 && <IssueBadges issues={r.issues} />}
-                        </div>
-                      </TableCell>
+                      <TableCell className="max-w-56 whitespace-normal max-sm:hidden">{status}</TableCell>
                     </LinkRow>
                   )
                 })}
               </TableBody>
               {!panel && (
                 <TableFooter>
-                  <TableRow>
+                  {/* Phones skip it: the count and total already sit above the table. */}
+                  <TableRow className="max-sm:hidden">
                     <TableHead scope="row" colSpan={3}>Total · {shown.length} voucher{plural(shown.length)}</TableHead>
                     <TableCell colSpan={2 + extras.length} className="hidden md:table-cell" />
                     <TableCell className="text-right tabular-nums">{peso(total(shown))}</TableCell>

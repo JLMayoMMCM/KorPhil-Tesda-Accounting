@@ -73,7 +73,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/voucher/da
         </DropdownMenuContent>
       </DropdownMenu>
       {year !== "all" && (
-        <nav aria-label="Month" className="flex flex-wrap items-center gap-1">
+        <nav aria-label="Month" className="grid w-full grid-cols-6 gap-1 sm:flex sm:w-auto sm:items-center">
           {MONTH_NUMBERS.map((m) => (
             <Button key={m} size="sm" variant={m === mm ? "secondary" : "ghost"} aria-current={m === mm ? "page" : undefined}
               render={<Link href={`/voucher/dashboard/?year=${year}&month=${m}`} />} nativeButton={false}>

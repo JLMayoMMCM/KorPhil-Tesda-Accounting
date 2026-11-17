@@ -62,7 +62,7 @@ export default async function CollectionDashboard({ searchParams }: PageProps<"/
         </DropdownMenuContent>
       </DropdownMenu>
       {year !== "all" && (
-        <nav aria-label="Month" className="flex flex-wrap items-center gap-1">
+        <nav aria-label="Month" className="grid w-full grid-cols-6 gap-1 sm:flex sm:w-auto sm:items-center">
           {MONTH_NUMBERS.map((m) => (
             <Button key={m} size="sm" variant={m === mm ? "secondary" : "ghost"} aria-current={m === mm ? "page" : undefined}
               render={<Link href={`/collection/dashboard/?year=${year}&month=${m}`} />} nativeButton={false}>
@@ -96,7 +96,9 @@ export default async function CollectionDashboard({ searchParams }: PageProps<"/
   const sum = collected(rows)
   const now = collected(entries.filter((e) => e.month === thisMonth)), before = collected(entries.filter((e) => e.month === lastMonth))
   const lastName = longMonth(lastMonth + "-01"), monthName = `${longMonth(thisMonth + "-01")} ${thisMonth.slice(0, 4)}`
-  const delta = before ? Math.round((100 * (now - before)) / before) : null
+  // A month still in progress isn't compared with a whole one: November so far vs all of October reads as a fall.
+  const partial = thisMonth === today.slice(0, 7)
+  const delta = before && !partial ? Math.round((100 * (now - before)) / before) : null
   const tone = !delta ? "var(--muted-foreground)" : delta > 0 ? "#16a34a" : "#dc2626"
   // A year compares January through the same month against the year before (all of it for a past year).
   const y = Number(year), through = year === today.slice(0, 4) ? today.slice(5, 7) : "12"
@@ -128,7 +130,7 @@ export default async function CollectionDashboard({ searchParams }: PageProps<"/
       <dl aria-label="Key figures" className="grid gap-4 @3xl/main:grid-cols-2">
         <Figure label={`Collected, ${scope}`} value={peso(sum)} note={yearChange ?? receipts(rows.length)} />
         <div className={cn(PANEL, "flex flex-col gap-1 bg-card px-5 py-4")}>
-          <dt className="text-sm text-muted-foreground">{monthName}</dt>
+          <dt className="text-sm text-muted-foreground">{monthName}{partial && " so far"}</dt>
           <dd className="flex flex-wrap items-baseline gap-x-2.5">
             <span className="text-3xl font-semibold tracking-tight tabular-nums">{peso(now)}</span>
             {delta !== null && (
