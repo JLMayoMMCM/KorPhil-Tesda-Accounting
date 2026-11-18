@@ -40,11 +40,13 @@ export type RecordPanelProps = {
   input?: (c: Column<string>, common: InputProps, choices: string[]) => React.ReactNode
   /** Called on every input, to keep one field in step with another. */
   onField?: (form: HTMLFormElement, name: string, value: string) => void
+  /** A closed year: the row can be read, not saved or deleted. */
+  readOnly?: boolean
 }
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/
 
-export function RecordPanel({ row, initial, columns, heading, status, source, closeUrl, save, remove, removeNote, required = [], wide = [], input, onField }: RecordPanelProps) {
+export function RecordPanel({ row, initial, columns, heading, status, source, closeUrl, save, remove, removeNote, required = [], wide = [], input, onField, readOnly = false }: RecordPanelProps) {
   const router = useRouter()
   const { run, setDirty, confirm } = useUI()
   const [changed, setChanged] = React.useState<string[]>([])
@@ -72,6 +74,7 @@ export function RecordPanel({ row, initial, columns, heading, status, source, cl
 
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    if (readOnly) return
     const data = new FormData(e.currentTarget)
     const result = await run("Saving to the sheet…", () => save(data), { inlineError: true })
     if (!result.ok) return setError(result.message)
@@ -113,7 +116,8 @@ export function RecordPanel({ row, initial, columns, heading, status, source, cl
     return <Input {...common} type={c.type === "date" && (!value || ISO.test(value)) ? "date" : "text"} />
   }
 
-  const note = row === null
+  const note = readOnly ? "Read-only year · can't be changed here"
+    : row === null
     ? "Not saved yet · adds a row"
     : changed.length ? `Unsaved · writes to row ${row}` : `No changes · row ${row}`
 
@@ -142,7 +146,7 @@ export function RecordPanel({ row, initial, columns, heading, status, source, cl
       <FieldGroup className="grid grid-cols-2 gap-4">
         {laidOut.map((c) => (
           <Field key={c.key} className={isWide(c) ? "col-span-2" : undefined}>
-            <FieldLabel htmlFor={c.key}>{c.label}{c.visibility === "readonly" && <span className="font-normal text-muted-foreground"> · read-only</span>}</FieldLabel>
+            <FieldLabel htmlFor={c.key}>{c.label}{c.visibility === "readonly" && !readOnly && <span className="font-normal text-muted-foreground"> · read-only</span>}</FieldLabel>
             {field(c)}
           </Field>
         ))}
@@ -155,7 +159,7 @@ export function RecordPanel({ row, initial, columns, heading, status, source, cl
 
       <footer className="flex flex-wrap items-center gap-2 border-t pt-4">
         <span className="text-sm font-medium">{note}</span>
-        {remove && row !== null && (
+        {remove && row !== null && !readOnly && (
           <Button type="button" variant="ghost" className="text-destructive" onClick={onDelete}>
             <Trash2Icon data-icon="inline-start" />Delete
           </Button>
@@ -163,7 +167,7 @@ export function RecordPanel({ row, initial, columns, heading, status, source, cl
         <Button variant="outline" className="ml-auto" render={<Link href={closeUrl} scroll={false} />} nativeButton={false}>
           Cancel<Kbd>Esc</Kbd>
         </Button>
-        <Button type="submit">Save to sheet<Kbd>Ctrl S</Kbd></Button>
+        {!readOnly && <Button type="submit">Save to sheet<Kbd>Ctrl S</Kbd></Button>}
       </footer>
     </form>
   )

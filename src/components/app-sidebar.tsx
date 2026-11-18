@@ -10,11 +10,12 @@ import {
   SidebarMenuButton, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem, SidebarRail,
 } from "@/components/ui/sidebar"
 import { TABS, type Tab } from "@/lib/ledger"
+import { YearPicker, type YearChoice } from "@/components/year-picker"
 import { MODULES, type Module, type NavItem } from "@/lib/nav"
 
-type Props = { module: Module; counts?: Record<Tab, number>; sheetTitle: string; synced: string; sheetUrl: string }
+type Props = { module: Module; counts?: Record<Tab, number>; sheetTitle: string; synced: string; sheetUrl: string; years: YearChoice[]; year: string }
 
-export function AppSidebar({ module, counts, sheetTitle, synced, sheetUrl }: Props) {
+export function AppSidebar({ module, counts, sheetTitle, synced, sheetUrl, years, year }: Props) {
   const path = usePathname()
   const tab = useSearchParams().get("tab") ?? "all"
 
@@ -32,6 +33,7 @@ export function AppSidebar({ module, counts, sheetTitle, synced, sheetUrl }: Pro
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+        <YearPicker years={years} year={year} />
       </SidebarHeader>
 
       <SidebarContent>

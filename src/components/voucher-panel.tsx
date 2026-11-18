@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils"
 
 type Props = Omit<RecordPanelProps, "save" | "remove" | "input" | "onField" | "required" | "wide"> & {
   dvNos?: string[] // every DV # in use, for a new voucher's number to follow its date
+  sheet: string // the spreadsheet the page showed, so a save can't land in another year's
 }
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/
@@ -36,9 +37,9 @@ function StatusSelect({ choices, ...props }: React.ComponentProps<typeof NativeS
   )
 }
 
-export function VoucherPanel({ dvNos, ...props }: Props) {
+export function VoucherPanel({ dvNos, sheet, ...props }: Props) {
   const autoNo = React.useRef(props.initial.dv_no) // the number last filled in; once the user types another, it stays theirs
-  const save = React.useMemo(() => saveVoucher.bind(null, props.row, props.initial.dv_no ?? ""), [props.row, props.initial.dv_no])
+  const save = React.useMemo(() => saveVoucher.bind(null, sheet, props.row, props.initial.dv_no ?? ""), [sheet, props.row, props.initial.dv_no])
   return (
     <RecordPanel
       {...props}

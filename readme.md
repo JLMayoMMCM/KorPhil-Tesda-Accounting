@@ -23,13 +23,19 @@ Create `.env.local` in the repo root:
 
 | Variable | |
 |---|---|
-| `GOOGLE_SHEET_ID` | required |
+| `GOOGLE_SHEET_ID` | required: the main spreadsheet. It is checked at sign-in, holds the **Years** tab (the list of each year's spreadsheet, managed on the Data sources page), and is the current year while that list is empty |
 | `GOOGLE_SHEET_RANGE` | tab name, default `EXP` (the app reads columns A:L from row 5) |
+| `COLLECTION_SHEET_ID`, `COLLECTION_SHEET_RANGE` | optional: the Collection module's spreadsheet and tab while the Years list is empty (default: the main spreadsheet, tab `Collection`) |
+| `YEARS_SHEET_ID` | optional: keep the Years tab in a separate registry spreadsheet instead of the main one |
 | `SHEET_LAYOUT` | optional: by default reads and writes go through the layout found in the sheet (Settings → Layout settings, then auto-detection), so the form follows its columns. `fixed` keeps the fixed A:L layout: the rollback switch |
 | `SHEET_HEADER_ROW`, `SHEET_FIRST_ROW` | optional: pin the header row and first data row for layout detection (empty = auto-detect) |
 | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | OAuth "Web application" client |
 | `SESSION_SECRET` | 32 random bytes, base64url: `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"` |
-| `GOOGLE_SHEET_API_KEY` | optional read-only fallback |
+
+`GOOGLE_SHEET_API_KEY` is no longer used: every read goes through the signed-in user's Google account, so no sheet needs "anyone with the link" sharing.
+
+### Years
+Each year's ledger is its own spreadsheet. **Data sources** (`/sources/`, linked from the portal and both Settings pages) lists them from the Years tab: add a year by pasting its link (the app previews it with your account first), set a closed year to **Read-only** (the server refuses every ledger write to it), hide or remove one (the spreadsheet itself is never deleted). The year picker in the sidebar switches every page and export, and is remembered per user. Each spreadsheet's own sharing decides who can open that year; the app checks it per user and per spreadsheet before showing cached rows. Saving to the Years tab needs edit access to the main spreadsheet.
 
 ### Sign in with Google
 Everyone signs in with their own Google account, and that account reads and writes the sheet. **The sheet's sharing is the access list:** anyone it's shared with can sign in, Editors can save, Viewers can only look.
@@ -71,4 +77,4 @@ npx vercel env add SESSION_SECRET production
 npx vercel deploy --prod
 ```
 
-Production env vars: `GOOGLE_SHEET_ID`, `GOOGLE_SHEET_RANGE`, `GOOGLE_SHEET_API_KEY`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `SESSION_SECRET` (`DJANGO_SECRET_KEY` is no longer used). The OAuth client needs `https://korphil-tesda-accounting.vercel.app/auth/callback/`.
+Production env vars: `GOOGLE_SHEET_ID`, `GOOGLE_SHEET_RANGE`, `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `SESSION_SECRET` (`DJANGO_SECRET_KEY` is no longer used). The OAuth client needs `https://korphil-tesda-accounting.vercel.app/auth/callback/`.

@@ -1,4 +1,4 @@
-import { CircleAlertIcon } from "lucide-react"
+import { CircleAlertIcon, LockIcon } from "lucide-react"
 import { cookies } from "next/headers"
 
 import { signOut } from "@/app/actions"
@@ -10,10 +10,10 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { Toaster } from "@/components/ui/toast"
 import { TooltipProvider } from "@/components/ui/tooltip"
 
-type Props = { sidebar: React.ReactNode; header: React.ReactNode; error?: string | null; children: React.ReactNode }
+type Props = { sidebar: React.ReactNode; header: React.ReactNode; error?: string | null; readOnlyYear?: string | null; children: React.ReactNode }
 
-/** The sidebar-and-header frame every module renders its pages in. */
-export async function AppShell({ sidebar, header, error, children }: Props) {
+/** The sidebar-and-header frame every module renders its pages in. readOnlyYear: the closed year being shown, if any. */
+export async function AppShell({ sidebar, header, error, readOnlyYear, children }: Props) {
   // The sidebar writes this cookie on toggle; reading it keeps the rail collapsed across reloads.
   const sidebarOpen = (await cookies()).get("sidebar_state")?.value !== "false"
   // Toast and tooltip live here, not in the root layout, so /login ships no Base UI.
@@ -25,6 +25,14 @@ export async function AppShell({ sidebar, header, error, children }: Props) {
             {sidebar}
             <SidebarInset className="min-w-0">
               {header}
+              {readOnlyYear && (
+                <Alert className="mx-4 mt-4 w-auto print:hidden">
+                  <LockIcon />
+                  <AlertDescription>
+                    {readOnlyYear} is read-only: its books are closed, so nothing here can be added, edited or verified. Switch years in the sidebar to make changes.
+                  </AlertDescription>
+                </Alert>
+              )}
               {error && (
                 <Alert variant="destructive" className="mx-4 mt-4 w-auto">
                   <CircleAlertIcon />

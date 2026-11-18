@@ -83,6 +83,11 @@ export default async function Portal() {
             </li>
           ))}
         </ul>
+
+        <p className="text-sm text-muted-foreground">
+          Each year&apos;s ledger is its own spreadsheet. <Link href="/sources/" className="font-medium text-primary underline-offset-4 hover:underline">Data sources</Link> lists
+          them, and is where a new year is added or a closed one set to read-only.
+        </p>
       </main>
     </div>
   )

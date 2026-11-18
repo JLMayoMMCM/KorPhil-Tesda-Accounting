@@ -18,8 +18,11 @@ type Ctx = { items: Item[]; selected: Set<number>; toggle: (row: number, on: boo
 const SelectionCtx = React.createContext<Ctx | null>(null)
 const useSelection = () => React.use(SelectionCtx)!
 
-/** verify: false hides Verify / For review (the sheet has no editable status column). */
-export function Selection({ items, verify = true, children }: { items: Item[]; verify?: boolean; children: React.ReactNode }) {
+/**
+ * verify: false hides Verify / For review (the sheet has no editable status column, or the year is read-only).
+ * sheet: the spreadsheet the page showed, so marking can't land in another year's.
+ */
+export function Selection({ items, sheet, verify = true, children }: { items: Item[]; sheet: string; verify?: boolean; children: React.ReactNode }) {
   const [selected, setSelected] = React.useState<Set<number>>(new Set())
   // Drop rows that disappeared (edited, filtered away) after a refresh.
   const live = React.useMemo(() => new Set(items.map((i) => i.sheet_row)), [items])
@@ -34,7 +37,7 @@ export function Selection({ items, verify = true, children }: { items: Item[]; v
   return (
     <SelectionCtx value={{ items, selected: current, toggle, setAll }}>
       {children}
-      <BulkBar verify={verify} />
+      <BulkBar verify={verify} sheet={sheet} />
     </SelectionCtx>
   )
 }
@@ -58,7 +61,7 @@ export function SelectAll() {
   )
 }
 
-function BulkBar({ verify }: { verify: boolean }) {
+function BulkBar({ verify, sheet }: { verify: boolean; sheet: string }) {
   const { items, selected, setAll } = useSelection()
   const { run } = useUI()
   if (!selected.size) return null
@@ -66,7 +69,7 @@ function BulkBar({ verify }: { verify: boolean }) {
   const sum = rows.reduce((a, r) => a + r.amount, 0)
   const exportUrl = "/voucher/vouchers/export/?" + new URLSearchParams(rows.map((r) => ["sel", String(r.sheet_row)]))
   const mark = async (verified: boolean) => {
-    const result = await run("Saving to the sheet…", () => setStatus(rows.map((r) => r.sheet_row), verified))
+    const result = await run("Saving to the sheet…", () => setStatus(sheet, rows.map((r) => r.sheet_row), verified))
     if (result.ok) {
       toast.add({ title: result.message, type: "success" })
       setAll(false)

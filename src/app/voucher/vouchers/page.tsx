@@ -34,7 +34,7 @@ const PER = { "10": "10", "50": "50", "100": "100", all: "All" } as const
 
 export default async function Vouchers({ searchParams }: PageProps<"/voucher/vouchers">) {
   const params = toParams(await searchParams)
-  const { rows, error, pull, columns, today } = await getData()
+  const { rows, error, pull, columns, today, source } = await getData()
   const shown = filterRows(rows, params)
   const tab = (params.get("tab") ?? "") in TABS ? (params.get("tab") as Tab) : "all"
   const per = (params.get("per") ?? "") in PER ? (params.get("per") as keyof typeof PER) : "50"
@@ -44,7 +44,7 @@ export default async function Vouchers({ searchParams }: PageProps<"/voucher/vou
   const pageRows = shown.slice((page - 1) * size, page * size)
 
   const panelRow = rows.find((r) => String(r.sheet_row) === params.get("open")) ?? null
-  const isNew = !panelRow && params.has("new")
+  const isNew = !panelRow && params.has("new") && !source.readOnly
   const panel = !!panelRow || isNew
   const closeUrl = "/voucher/vouchers/" + qs(params, { open: null, new: null })
   const dvNos = rows.map((r) => r.dv_no)
@@ -134,7 +134,7 @@ export default async function Vouchers({ searchParams }: PageProps<"/voucher/vou
         )}
 
         {shown.length ? (
-          <Selection verify={columns.some((c) => c.field === "status" && c.visibility === "shown")} items={pageRows.map(({ sheet_row, dv_no, amount }) => ({ sheet_row, dv_no, amount }))}>
+          <Selection sheet={source.id} verify={columns.some((c) => c.field === "status" && c.visibility === "shown")} items={pageRows.map(({ sheet_row, dv_no, amount }) => ({ sheet_row, dv_no, amount }))}>
             {/* Related fields stack two to a cell so every field fits without scrolling sideways; Payee takes the slack and truncates. */}
             <Table>
               <TableHeader>
@@ -254,6 +254,8 @@ export default async function Vouchers({ searchParams }: PageProps<"/voucher/vou
           status={panelRow ? <IssueBadges issues={panelRow.issues} /> : "Adds a new row at the bottom of the sheet."}
           source={panelRow ? `Source: ${pull.title || "Google Sheet"} · row ${panelRow.sheet_row} · pulled ${clock(pull.at)}` : ""}
           closeUrl={closeUrl}
+          sheet={source.id}
+          readOnly={source.readOnly}
         />
       )}
     </div>

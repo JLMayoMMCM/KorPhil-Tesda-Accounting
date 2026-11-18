@@ -28,7 +28,7 @@ const BASE = "/collection/collections/"
 /** Every receipt on the Collection tab, newest first, with the same filters the dashboard links to. A row opens in the side panel to edit or delete; ?new opens a blank one. */
 export default async function Collections({ searchParams }: PageProps<"/collection/collections">) {
   const params = toParams(await searchParams)
-  const { entries, rows, columns, title, at, today, error } = await getCollectionData()
+  const { entries, rows, columns, title, at, today, error, source } = await getCollectionData()
   // "Needs review": receipts with any flag.
   const view = params.get("issue") === "any" ? "review" : ""
   const shown = filterEntries(entries, params)
@@ -38,7 +38,7 @@ export default async function Collections({ searchParams }: PageProps<"/collecti
 
   const panelEntry = entries.find((e) => String(e.sheet_row) === params.get("open")) ?? null
   const panelRow = (panelEntry && rows.find((r) => r.sheet_row === panelEntry.sheet_row)) ?? null
-  const isNew = !panelRow && params.has("new") && columns.length > 0
+  const isNew = !panelRow && params.has("new") && columns.length > 0 && !source.readOnly
   const panel = !!panelRow || isNew
   const closeUrl = BASE + qs(params, { open: null, new: null })
   const sig = panelRow ? rowSig(panelRow, columns) : ""
@@ -215,8 +215,9 @@ export default async function Collections({ searchParams }: PageProps<"/collecti
         ) : "Adds a row after the last entry in the sheet."}
         source={panelRow ? `Source: ${title || "Google Sheet"} · row ${panelRow.sheet_row} · pulled ${clock(at)}` : ""}
         closeUrl={closeUrl}
-        save={saveEntry.bind(null, panelRow?.sheet_row ?? null, sig)}
-        remove={panelRow ? deleteEntry.bind(null, panelRow.sheet_row, sig) : undefined}
+        save={saveEntry.bind(null, source.id, panelRow?.sheet_row ?? null, sig)}
+        remove={panelRow ? deleteEntry.bind(null, source.id, panelRow.sheet_row, sig) : undefined}
+        readOnly={source.readOnly}
         removeNote={panelRow ? `Clears this entry's cells in row ${panelRow.sheet_row}. The row stays, and so do Deposit, Undeposited and the summary tables beside it. Undo from the sheet's version history.` : undefined}
         required={COLLECTION.required}
         wide={["payor", "uacs", "nature"]}

@@ -15,6 +15,7 @@ import { colLetter, INPUT_TYPES, VISIBILITY, type Saved } from "@/lib/sheet-conf
 
 type Props = {
   book: "voucher" | "collection" // which tab's settings this edits
+  sheet: string // the year's spreadsheet the page showed, so a save can't land in another year's
   fields: Record<string, string> // the book's roles, by field, labelled as its roles table names them
   top: string[][] // the tab's first 20 rows
   index: RowHit[] // every non-blank row, for finding rows to ignore by reference, row number or amount
@@ -132,7 +133,7 @@ function summary(data: FormData) {
   return `Header row ${data.get("header")} · ${n(ignored.size, "row")} ignored · ${n(columns.size, "column")} set by hand.`
 }
 
-function Editor({ book, fields, top, index, detected, saved, state, action, pending }: Props & {
+function Editor({ book, sheet, fields, top, index, detected, saved, state, action, pending }: Props & {
   state: LayoutResult; action: (data: FormData) => void; pending: boolean
 }) {
   const { confirm } = useUI()
@@ -171,6 +172,7 @@ function Editor({ book, fields, top, index, detected, saved, state, action, pend
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4 text-sm">
       <input type="hidden" name="book" value={book} />
+      <input type="hidden" name="sheet" value={sheet} />
       <p className="text-muted-foreground">
         {saved ? <>Saved by {saved.by || "someone"}{saved.at && ` on ${new Date(saved.at).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Manila" })}`}.</>
           : "Nothing saved yet: the layout is auto-detected."} Only the sheet&apos;s Editors can save; for Viewers, Google refuses the change.

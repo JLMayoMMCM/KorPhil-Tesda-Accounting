@@ -1,5 +1,6 @@
-import { CircleAlertIcon, CircleCheckIcon, ExternalLinkIcon, PlugIcon, UnplugIcon, UsersIcon } from "lucide-react"
+import { CalendarRangeIcon, CircleAlertIcon, CircleCheckIcon, ExternalLinkIcon, PlugIcon, UnplugIcon, UsersIcon } from "lucide-react"
 import type { Metadata } from "next"
+import Link from "next/link"
 
 import { LayoutEditor } from "@/components/layout-editor"
 import { SyncButton } from "@/components/sync-button"
@@ -13,15 +14,16 @@ import { FIELD_LABELS, rowIndex, type Field } from "@/lib/ledger"
 import { RoleNote } from "@/components/role-note"
 import { bookRoles, colLetter, DISBURSEMENT, fixedLayout, INPUT_TYPES, layoutDiff, REQUIRED, VISIBILITY, type SheetModel } from "@/lib/sheet-config"
 import { fullName } from "@/lib/session"
-import { CACHE_SECONDS, LAYOUT_MODE, SHEET_ID, SHEET_RANGE, sheetUrl } from "@/lib/sheets"
+import { CACHE_SECONDS, LAYOUT_MODE, sheetUrl } from "@/lib/sheets"
 
 export const metadata: Metadata = { title: "Settings" }
 
 export default async function Settings() {
-  const { error, pull, user } = await getData()
+  const { error, pull, user, source } = await getData()
+  const url = sheetUrl(source.id)
   const roles = bookRoles(DISBURSEMENT, pull.lists)
-  const open = (text: string) => sheetUrl && (
-    <Button variant="outline" render={<a href={sheetUrl} target="_blank" rel="noopener" />} nativeButton={false}>
+  const open = (text: string) => url && (
+    <Button variant="outline" render={<a href={url} target="_blank" rel="noopener" />} nativeButton={false}>
       {text}<ExternalLinkIcon data-icon="inline-end" />
     </Button>
   )
@@ -32,9 +34,14 @@ export default async function Settings() {
         ? <Badge variant="destructive"><UnplugIcon data-icon="inline-start" />Not connected</Badge>
         : <Badge variant="secondary"><PlugIcon data-icon="inline-start" />Connected through your Google account</Badge>}
     </>, open("Open sheet")],
-    ["Sheet ID and range", "", <>
-      <code className="break-all">{SHEET_ID || "Not set"}</code>
-      <code>{SHEET_RANGE}</code>
+    ["Year", "Switch years in the sidebar.", <>
+      <strong className="font-medium">{source.year || "Current year"}</strong>
+      {source.readOnly && <Badge variant="secondary">Read-only</Badge>}
+      {!source.year && <span className="text-muted-foreground">from <code>.env.local</code>, until years are added on Data sources</span>}
+    </>, <Button key="sources" variant="outline" render={<Link href="/sources/" />} nativeButton={false}><CalendarRangeIcon data-icon="inline-start" />Data sources</Button>],
+    ["Sheet ID and tab", "", <>
+      <code className="break-all">{source.id || "Not set"}</code>
+      <code>{source.range}</code>
       {pull.model && <span className="text-muted-foreground">
         Header on row {pull.model.layout.headerRow}, vouchers from row {pull.model.layout.firstRow}, columns A:{colLetter(Math.max(0, ...pull.model.columns.map((c) => c.col)))}
       </span>}
@@ -59,8 +66,8 @@ export default async function Settings() {
         <CardHeader>
           <CardTitle>Data source</CardTitle>
           <CardDescription>
-            The Google Sheet this app reads from and writes back to. These values come from <code>.env.local</code> (or the
-            Vercel project&apos;s environment variables); change them there and restart.
+            The Google Sheet this app reads from and writes back to for the year picked in the sidebar. Each year&apos;s sheet is
+            listed on the Data sources page, where years are added, closed or retired.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -94,7 +101,7 @@ export default async function Settings() {
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             <RoleNote roles={roles} labels={FIELD_LABELS} />
-            <LayoutEditor book="voucher" fields={Object.fromEntries(roles.roles.map((r) => [r.field, r.label]))} top={pull.top} index={rowIndex(pull.values, pull.candidate.columns)} saved={pull.saved} detected={{
+            <LayoutEditor book="voucher" sheet={source.id} fields={Object.fromEntries(roles.roles.map((r) => [r.field, r.label]))} top={pull.top} index={rowIndex(pull.values, pull.candidate.columns)} saved={pull.saved} detected={{
               headerRow: pull.candidate.layout.headerRow,
               roles: { ...Object.fromEntries(Object.entries(pull.candidate.layout.columns).map(([f, c]) => [c, f as Field])),
                 ...Object.fromEntries((pull.candidate.layout.extras ?? []).filter((x) => x.custom).map((x) => [x.col, `x:${x.text}`])) },

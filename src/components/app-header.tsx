@@ -23,7 +23,8 @@ import type { GoogleUser } from "@/lib/session"
 // Below lg the header can't fit labelled actions on one row, so they go icon-only (the label stays for screen readers).
 const ICON_BELOW_LG = "max-lg:size-8 max-lg:p-0"
 
-export function AppHeader({ module, user, synced = "" }: { module: Module; user: GoogleUser; synced?: string }) {
+/** readOnly: a closed year is shown, so there's no New button. */
+export function AppHeader({ module, user, synced = "", readOnly = false }: { module: Module; user: GoogleUser; synced?: string; readOnly?: boolean }) {
   const path = usePathname()
   const params = useSearchParams()
   const title = MODULES[module].nav.find((i) => path.startsWith(i.href.slice(0, -1)))?.title ?? MODULES[module].name
@@ -37,9 +38,11 @@ export function AppHeader({ module, user, synced = "" }: { module: Module; user:
       <h1 className="mr-2 font-heading text-lg font-semibold">{title}</h1>
       {/* The voucher tools; other modules get their own once they're built. */}
       {module === "voucher" && <>
-        <Button render={<Link href="/voucher/vouchers/?new=1" />} nativeButton={false} data-key="n">
-          <PlusIcon data-icon="inline-start" />New DV<Kbd className="max-md:hidden">N</Kbd>
-        </Button>
+        {!readOnly && (
+          <Button render={<Link href="/voucher/vouchers/?new=1" />} nativeButton={false} data-key="n">
+            <PlusIcon data-icon="inline-start" />New DV<Kbd className="max-md:hidden">N</Kbd>
+          </Button>
+        )}
         <Form action="/voucher/vouchers/" role="search" className="min-w-48 flex-1 max-md:order-last max-md:basis-full md:max-w-sm">
           <InputGroup>
             <InputGroupAddon><SearchIcon /></InputGroupAddon>
@@ -61,9 +64,11 @@ export function AppHeader({ module, user, synced = "" }: { module: Module; user:
           <SyncButton variant="outline" title="Sync" className={ICON_BELOW_LG}><span className="max-lg:sr-only">Sync</span></SyncButton>
         </>}
         {module === "collection" && <>
-          <Button render={<Link href="/collection/collections/?new=1" />} nativeButton={false} data-key="n">
-            <PlusIcon data-icon="inline-start" />New collection<Kbd className="max-md:hidden">N</Kbd>
-          </Button>
+          {!readOnly && (
+            <Button render={<Link href="/collection/collections/?new=1" />} nativeButton={false} data-key="n">
+              <PlusIcon data-icon="inline-start" />New collection<Kbd className="max-md:hidden">N</Kbd>
+            </Button>
+          )}
           <Button variant="outline" render={<Link href="/collection/reports/" />} nativeButton={false} className="hidden xl:inline-flex">Run report</Button>
           {synced && <span className="hidden text-xs text-muted-foreground 2xl:inline">Synced {synced}</span>}
           <SyncButton variant="outline" module="collection" title="Sync" className={ICON_BELOW_LG}><span className="max-lg:sr-only">Sync</span></SyncButton>
