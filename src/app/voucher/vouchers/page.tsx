@@ -134,7 +134,7 @@ export default async function Vouchers({ searchParams }: PageProps<"/voucher/vou
         )}
 
         {shown.length ? (
-          <Selection sheet={source.id} verify={columns.some((c) => c.field === "status" && c.visibility === "shown")} items={pageRows.map(({ sheet_row, dv_no, amount }) => ({ sheet_row, dv_no, amount }))}>
+          <Selection sheet={source.id} remove={!source.readOnly} verify={columns.some((c) => c.field === "status" && c.visibility === "shown")} items={pageRows.map(({ sheet_row, dv_no, amount }) => ({ sheet_row, dv_no, amount }))}>
             {/* Related fields stack two to a cell so every field fits without scrolling sideways; Payee takes the slack and truncates. */}
             <Table>
               <TableHeader>

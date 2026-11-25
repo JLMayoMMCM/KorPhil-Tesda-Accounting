@@ -7,9 +7,10 @@ import { redirect } from "next/navigation"
 import { COLLECTION } from "@/lib/collection"
 import { getSession, getSource, YEAR_COOKIE } from "@/lib/data"
 import { cellOf, DV_FORMAT, FOR_REVIEW, freeDvNo, parseAmount, parseDate, rowSig, sameChoice, sheetDate, todayManila, VERIFIED, type SheetRow } from "@/lib/ledger"
+import { COLLECTION_HOME, VOUCHER_HOME } from "@/lib/nav"
 import { SESSION_COOKIE } from "@/lib/session"
 import { bookRoles, colLetter, DISBURSEMENT, INPUT_TYPES, VISIBILITY, type Book, type Column, type ColumnSetting, type InputType, type Saved, type SheetModel, type Visibility } from "@/lib/sheet-config"
-import { appendRow, type BookName, DEFAULT_TAB, fetchRows, readOnlyMessage, readWith, saveSettings, setDvNo, setStatuses, updateCells } from "@/lib/sheets"
+import { appendRow, type BookName, DEFAULT_TAB, fetchRows, readOnlyMessage, readWith, saveSettings, setDvNo, setStatuses, updateCells, writeCells } from "@/lib/sheets"
 import { MODULE_NAMES, STATUSES, YEAR, type Status } from "@/lib/years"
 import { addYear, changeYear, previewSheet, type Preview } from "@/lib/years-sheet"
 
@@ -171,6 +172,32 @@ export async function setStatus(sheet: string, sheetRows: number[], verified: bo
 }
 
 /**
+ * Delete many voucher rows by clearing their ledger cells, like deleteEntry: the rows stay, so formulas beside them
+ * keep working, and read-only and hidden columns are left as they are. The sheet is re-read first and each row must
+ * still hold the DV # the page showed. One request; each cleared cell is logged with its old value.
+ */
+export async function deleteVouchers(sheet: string, picked: { sheet_row: number; dv_no: string }[]): Promise<Result> {
+  if (!picked.length || !picked.every((p) => isRow(p.sheet_row))) return { ok: false, message: "Those rows aren't voucher rows." }
+  const { token, user, src, error: switched } = await target("voucher", sheet)
+  if (switched) return { ok: false, message: switched }
+  if (src.readOnly) return { ok: false, message: readOnlyMessage(src) }
+  const [rows, pullError, pull] = await fetchRows(src, token, true)
+  if (pullError) return { ok: false, message: pullError }
+  const shown = (pull.model?.columns ?? []).filter((c) => c.visibility === "shown")
+  const cells = []
+  for (const p of picked) {
+    const row = rows.find((r) => r.sheet_row === p.sheet_row)
+    if (!row || row.dv_no.trim() !== p.dv_no.trim())
+      return { ok: false, message: `Row ${p.sheet_row} no longer holds ${p.dv_no.trim() || "that voucher"}. Sync and try again.` }
+    for (const c of shown) if (cellOf(row, c).trim()) cells.push({ row: p.sheet_row, key: c.key, value: "" })
+  }
+  const error = await writeCells(src, token, cells, user.email)
+  if (error) return { ok: false, message: error }
+  refresh()
+  return { ok: true, message: `Deleted ${picked.length} voucher${picked.length === 1 ? "" : "s"}.` }
+}
+
+/**
  * Change one row's DV # (that cell only) from `from` to `to`. The sheet is re-read first: the row must still hold
  * `from`, and a `to` someone else just used becomes the next free number (dvNo says which was written).
  * restore (undo) puts back an old number as is, duplicate or not.
@@ -276,13 +303,12 @@ export async function layoutAction(_: LayoutResult, form: FormData): Promise<Lay
   return { ok: true, message: `Saved. ${summary}` }
 }
 
-/** Switch every page to another year (the sidebar's picker). "" goes back to the newest Active year. */
-export async function setYear(year: string) {
-  if (year && !YEAR.test(year)) return
-  const jar = await cookies()
-  if (year) jar.set(YEAR_COOKIE, year, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 400 })
-  else jar.delete(YEAR_COOKIE)
+/** Open one year's spreadsheet in a module (the home page's Open buttons). Every page and export then reads that year. */
+export async function openYear(year: string, module: string) {
+  if (!YEAR.test(year) || !isBook(module)) return
+  ;(await cookies()).set(YEAR_COOKIE, year, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 400 })
   refresh()
+  redirect(module === "voucher" ? VOUCHER_HOME : COLLECTION_HOME)
 }
 
 // ---- Data sources: the Years list. Writing it needs edit access to the main spreadsheet; Google enforces that. ----
@@ -290,23 +316,34 @@ export async function setYear(year: string) {
 const isBook = (v: string): v is BookName => v === "voucher" || v === "collection"
 export type SourceResult = { ok: boolean; message: string; preview?: Preview } | null
 
-/** Data sources → Add year: "check" opens the link and previews it; "save" checks again and adds it to the Years list. */
+/**
+ * Data sources → Add a year: one spreadsheet holding both tabs. "check" opens the link and previews each tab; "save"
+ * checks again and lists the year for both modules. A blank tab leaves that module out (it can live in another file).
+ */
 export async function sourceAction(_: SourceResult, form: FormData): Promise<SourceResult> {
-  const year = String(form.get("year") ?? "").trim(), book = String(form.get("module") ?? "")
-  const link = String(form.get("link") ?? "").trim(), tab = String(form.get("tab") ?? "").trim()
+  const year = String(form.get("year") ?? "").trim(), link = String(form.get("link") ?? "").trim()
   const status = String(form.get("status") ?? "Active") as Status
+  const books = (["voucher", "collection"] as const).map((b) => [b, String(form.get(`tab-${b}`) ?? "").trim()] as const).filter(([, tab]) => tab)
   if (!YEAR.test(year)) return { ok: false, message: "Enter the year as four digits, like 2026." }
-  if (!isBook(book)) return { ok: false, message: "Pick Disbursement or Collection." }
+  if (!books.length) return { ok: false, message: "Enter the Disbursement tab, the Collection tab, or both." }
   if (!STATUSES.includes(status)) return { ok: false, message: "Pick a status." }
   const { access_token: token, user } = await getSession()
-  const preview = await previewSheet(book, token, link, tab)
-  if (preview.error) return { ok: false, message: preview.error, preview }
-  const found = `${preview.title}: ${preview.tab} tab, header on row ${preview.headerRow}, ${preview.rows} ${book === "voucher" ? "vouchers" : "entries"}.`
-  if (form.get("intent") !== "save") return { ok: true, message: found, preview }
-  const error = await addYear(token, { year, module: book, link, tab: preview.tab === DEFAULT_TAB[book] ? "" : preview.tab, status }, user.email)
-  if (error) return { ok: false, message: error, preview }
+  const previews = await Promise.all(books.map(([b, tab]) => previewSheet(b, token, link, tab)))
+  const bad = previews.findIndex((p) => p.error)
+  if (bad >= 0) return { ok: false, message: `${MODULE_NAMES[books[bad][0]]}: ${previews[bad].error}`, preview: previews[bad] }
+  const found = `${previews[0].title}: ${books.map(([b], i) => `${previews[i].tab} tab, header on row ${previews[i].headerRow}, ${previews[i].rows} ${b === "voucher" ? "vouchers" : "entries"}`).join("; ")}.`
+  if (form.get("intent") !== "save") return { ok: true, message: found, preview: previews[0] }
+  const added: string[] = []
+  for (const [i, [b]] of books.entries()) {
+    const error = await addYear(token, { year, module: b, link, tab: previews[i].tab === DEFAULT_TAB[b] ? "" : previews[i].tab, status }, user.email)
+    if (error) {
+      if (added.length) refresh()
+      return { ok: false, message: added.length ? `Added ${added.join(" and ")}, but not ${MODULE_NAMES[b]}: ${error}` : error, preview: previews[i] }
+    }
+    added.push(`${year} ${MODULE_NAMES[b]}`)
+  }
   refresh()
-  return { ok: true, message: `Added ${year} ${MODULE_NAMES[book]}. ${found}` }
+  return { ok: true, message: `Added ${added.join(" and ")}. ${found}` }
 }
 
 /** Data sources → one row: set its status, change its link or tab, or remove it from the list. Bound to the row as listed. */

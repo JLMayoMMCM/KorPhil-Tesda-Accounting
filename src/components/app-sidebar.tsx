@@ -5,17 +5,17 @@ import Image from "next/image"
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 
+import { NavSlot } from "@/components/nav-pending"
 import {
-  Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu, SidebarMenuBadge,
+  Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarHeader, SidebarMenu,
   SidebarMenuButton, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem, SidebarRail,
 } from "@/components/ui/sidebar"
 import { TABS, type Tab } from "@/lib/ledger"
-import { YearPicker, type YearChoice } from "@/components/year-picker"
 import { MODULES, type Module, type NavItem } from "@/lib/nav"
 
-type Props = { module: Module; counts?: Record<Tab, number>; sheetTitle: string; synced: string; sheetUrl: string; years: YearChoice[]; year: string }
+type Props = { module: Module; counts?: Record<Tab, number>; sheetTitle: string; synced: string; sheetUrl: string; year: string }
 
-export function AppSidebar({ module, counts, sheetTitle, synced, sheetUrl, years, year }: Props) {
+export function AppSidebar({ module, counts, sheetTitle, synced, sheetUrl, year }: Props) {
   const path = usePathname()
   const tab = useSearchParams().get("tab") ?? "all"
 
@@ -24,16 +24,23 @@ export function AppSidebar({ module, counts, sheetTitle, synced, sheetUrl, years
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" tooltip="All modules" render={<Link href="/" />}>
+            <SidebarMenuButton size="lg" tooltip="Spreadsheets" render={<Link href="/" />}>
               <Image src="/tesda_korphil_logo.png" alt="" width={32} height={32} />
               <span className="flex flex-col leading-tight">
                 <strong className="font-semibold">KorPhil-TESDA</strong>
                 <small className="text-sidebar-foreground/70">{MODULES[module].name}</small>
               </span>
+              <NavSlot />
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
-        <YearPicker years={years} year={year} />
+        {/* The year this module reads; Change goes back to the home page's spreadsheet list. */}
+        {year && (
+          <Link href="/" className="mx-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground group-data-[collapsible=icon]:hidden">
+            <span>Year <strong className="font-semibold text-sidebar-foreground tabular-nums">{year}</strong></span>
+            <span className="ml-auto underline underline-offset-4">Change</span>
+          </Link>
+        )}
       </SidebarHeader>
 
       <SidebarContent>
@@ -44,18 +51,15 @@ export function AppSidebar({ module, counts, sheetTitle, synced, sheetUrl, years
               return (
                 <SidebarMenuItem key={href}>
                   <SidebarMenuButton isActive={here && (!tabs || tab === "all")} tooltip={title} render={<Link href={href} />}>
-                    <Icon />{title}
+                    <Icon />{title}<NavSlot>{tabs && counts && <span className="text-xs font-medium text-sidebar-foreground">{counts.all}</span>}</NavSlot>
                   </SidebarMenuButton>
                   {tabs && counts && <>
-                    <SidebarMenuBadge>{counts.all}</SidebarMenuBadge>
                     <SidebarMenuSub>
                       {(Object.entries(TABS) as [Tab, string][]).filter(([key]) => key !== "all").map(([key, name]) => (
                         <SidebarMenuSubItem key={key}>
                           <SidebarMenuSubButton isActive={here && tab === key} render={<Link href={`${href}?tab=${key}`} />}>
                             <span>{name}</span>
-                            <span className="ml-auto text-sidebar-foreground/70 tabular-nums">
-                              {counts[key]}
-                            </span>
+                            <NavSlot>{counts[key]}</NavSlot>
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
                       ))}

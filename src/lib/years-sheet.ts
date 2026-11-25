@@ -5,7 +5,7 @@ import {
   API, call, canOpen, DEFAULT_TAB, envSource, explain, fetchRows, isMissingTab, quoted, SHEET_ID, valuesUrl,
   type BookName, type Source,
 } from "@/lib/sheets"
-import { MODULE_NAMES, parseYears, pickYear, sheetIdOf, YEAR, YEARS_HEADER, YEARS_TAB, yearsColumns, yearsFor, type Status, type YearRow } from "@/lib/years"
+import { MODULE_NAMES, parseYears, pickYear, sheetIdOf, YEAR, YEARS_HEADER, YEARS_TAB, yearsColumns, type Status, type YearRow } from "@/lib/years"
 
 // The Years list lives in the main spreadsheet unless YEARS_SHEET_ID names a separate registry spreadsheet.
 export const YEARS_SHEET_ID = process.env.YEARS_SHEET_ID || SHEET_ID
@@ -37,14 +37,11 @@ export async function readYears(token: string, force = false): Promise<{ rows: Y
 export const sourceOf = <N extends BookName>(name: N, r: YearRow): Source<N> =>
   ({ name, id: r.id, range: r.tab || DEFAULT_TAB[name], year: r.year, readOnly: r.status === "Read-only" })
 
-export type YearChoice = { year: string; readOnly: boolean }
-
-/** Where a module reads for the year asked for (see pickYear), the years it can switch to, and why the list failed if it did. */
+/** Where a module reads for the year asked for (see pickYear), and why the list failed if it did. */
 export async function resolveSource<N extends BookName>(name: N, token: string, wanted: string) {
   const { rows, error } = await readYears(token)
   const row = pickYear(rows, name, wanted)
-  const years: YearChoice[] = yearsFor(rows, name).map((r) => ({ year: r.year, readOnly: r.status === "Read-only" }))
-  return { source: row ? sourceOf(name, row) : envSource(name), years, error }
+  return { source: row ? sourceOf(name, row) : envSource(name), error }
 }
 
 /** The Years tab's grid ID, adding the tab (with its header row) if the main spreadsheet doesn't have it yet. */

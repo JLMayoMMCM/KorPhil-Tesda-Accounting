@@ -29,7 +29,7 @@ export async function AppShell({ sidebar, header, error, readOnlyYear, children 
                 <Alert className="mx-4 mt-4 w-auto print:hidden">
                   <LockIcon />
                   <AlertDescription>
-                    {readOnlyYear} is read-only: its books are closed, so nothing here can be added, edited or verified. Switch years in the sidebar to make changes.
+                    {readOnlyYear} is read-only: its books are closed, so nothing here can be added, edited or verified. Change the year from the sidebar to make changes.
                   </AlertDescription>
                 </Alert>
               )}

@@ -5,7 +5,7 @@ import { clock, getCollectionData } from "@/lib/data"
 import { sheetUrl } from "@/lib/sheets"
 
 export default async function CollectionLayout({ children }: LayoutProps<"/collection">) {
-  const { at, title, entries, error, user, source, years } = await getCollectionData()
+  const { at, title, entries, error, user, source } = await getCollectionData()
   const synced = clock(at)
   return (
     <AppShell
@@ -17,7 +17,6 @@ export default async function CollectionLayout({ children }: LayoutProps<"/colle
           sheetTitle={title || "Collection Sheet"}
           synced={synced ? `Synced ${synced} · ${entries.length} entries` : "Not synced"}
           sheetUrl={sheetUrl(source.id)}
-          years={years}
           year={source.year}
         />
       }

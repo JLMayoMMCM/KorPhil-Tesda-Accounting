@@ -38,7 +38,7 @@ export default async function DataSources() {
           <p className="font-semibold">KorPhil-TESDA <span className="font-normal text-sidebar-foreground/70">Data sources</span></p>
           <Button variant="ghost" size="sm" className="ml-auto text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
             render={<Link href="/" />} nativeButton={false}>
-            <ArrowLeftIcon data-icon="inline-start" />Modules
+            <ArrowLeftIcon data-icon="inline-start" />Spreadsheets
           </Button>
         </div>
       </header>
@@ -47,9 +47,12 @@ export default async function DataSources() {
         <div className="flex flex-col gap-1">
           <h1 className="font-heading text-2xl font-semibold tracking-tight">Data sources</h1>
           <p className="text-muted-foreground">
-            Each year&apos;s ledger is its own spreadsheet. The list below is the {YEARS_TAB} tab of the{" "}
-            <a className="underline underline-offset-4" href={sheetUrl(YEARS_SHEET_ID)} target="_blank" rel="noopener">main spreadsheet</a>;
-            the year picker in each module&apos;s sidebar switches between them.
+            Each year&apos;s ledger is its own spreadsheet. Add one here and it appears on the home page, ready to open.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            This list is saved in the {YEARS_TAB} tab of the{" "}
+            <a className="underline underline-offset-4" href={sheetUrl(YEARS_SHEET_ID)} target="_blank" rel="noopener">app&apos;s main spreadsheet</a>{" "}
+            (set in .env.local). Keep that file: changing this list needs edit access to it.
           </p>
         </div>
 
@@ -65,7 +68,7 @@ export default async function DataSources() {
             <CardTitle>Years</CardTitle>
             <CardDescription>
               Active years can be edited. Read-only years are closed books: they can be read and reported on, and the server
-              refuses any change to them. Hidden years are left out of the year picker. Removing a year only takes it off this
+              refuses any change to them. Hidden years are left off the home page. Removing a year only takes it off this
               list; the spreadsheet is never deleted.
             </CardDescription>
           </CardHeader>
@@ -124,12 +127,12 @@ export default async function DataSources() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card id="add" className="scroll-mt-4">
           <CardHeader>
             <CardTitle>Add a year</CardTitle>
             <CardDescription>
-              Paste the spreadsheet&apos;s link and press Check: the app opens it with your Google account and shows what it
-              finds before anything is saved. A year can use one spreadsheet for both modules (add it twice) or one for each.
+              Paste the year&apos;s spreadsheet link and press Check: the app opens it with your Google account and checks
+              its Disbursement and Collection tabs before anything is saved.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -143,7 +146,7 @@ export default async function DataSources() {
           </CardHeader>
           <CardContent>
             <ol className="flex list-decimal flex-col gap-2 pl-5 text-sm">
-              <li>In Google Drive, make a copy of last year&apos;s spreadsheet and clear its ledger rows. Its Selection List and layout settings come along.</li>
+              <li>In Google Drive, make a copy of last year&apos;s spreadsheet and clear the rows in its EXP and Collection tabs. Its Selection List and layout settings come along.</li>
               <li>Share the copy with the same people as last year. Each spreadsheet&apos;s sharing is its access list.</li>
               <li>Add it above: paste the link, check the preview, and save.</li>
               <li>Set last year to Read-only, so closed books can&apos;t be edited by mistake.</li>

@@ -1,11 +1,11 @@
 "use client"
 
-// Row checkboxes and the bulk bar (Verify / For review / Export / Clear).
-import { BadgeCheckIcon, DownloadIcon } from "lucide-react"
+// Row checkboxes and the bulk bar (Verify / For review / Export / Delete / Clear).
+import { BadgeCheckIcon, DownloadIcon, Trash2Icon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import * as React from "react"
 
-import { setStatus } from "@/app/actions"
+import { deleteVouchers, setStatus } from "@/app/actions"
 import { useUI } from "@/components/app-ui"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -20,9 +20,10 @@ const useSelection = () => React.use(SelectionCtx)!
 
 /**
  * verify: false hides Verify / For review (the sheet has no editable status column, or the year is read-only).
+ * remove: false hides Delete (the year is read-only).
  * sheet: the spreadsheet the page showed, so marking can't land in another year's.
  */
-export function Selection({ items, sheet, verify = true, children }: { items: Item[]; sheet: string; verify?: boolean; children: React.ReactNode }) {
+export function Selection({ items, sheet, verify = true, remove = true, children }: { items: Item[]; sheet: string; verify?: boolean; remove?: boolean; children: React.ReactNode }) {
   const [selected, setSelected] = React.useState<Set<number>>(new Set())
   // Drop rows that disappeared (edited, filtered away) after a refresh.
   const live = React.useMemo(() => new Set(items.map((i) => i.sheet_row)), [items])
@@ -37,7 +38,7 @@ export function Selection({ items, sheet, verify = true, children }: { items: It
   return (
     <SelectionCtx value={{ items, selected: current, toggle, setAll }}>
       {children}
-      <BulkBar verify={verify} sheet={sheet} />
+      <BulkBar verify={verify} remove={remove} sheet={sheet} />
     </SelectionCtx>
   )
 }
@@ -61,9 +62,9 @@ export function SelectAll() {
   )
 }
 
-function BulkBar({ verify, sheet }: { verify: boolean; sheet: string }) {
+function BulkBar({ verify, remove, sheet }: { verify: boolean; remove: boolean; sheet: string }) {
   const { items, selected, setAll } = useSelection()
-  const { run } = useUI()
+  const { confirm, run } = useUI()
   if (!selected.size) return null
   const rows = items.filter((i) => selected.has(i.sheet_row))
   const sum = rows.reduce((a, r) => a + r.amount, 0)
@@ -75,19 +76,35 @@ function BulkBar({ verify, sheet }: { verify: boolean; sheet: string }) {
       setAll(false)
     }
   }
+  const onDelete = async () => {
+    const n = rows.length === 1 ? rows[0].dv_no.trim() || "1 voucher" : `${rows.length} vouchers`
+    const note = `Clears ${rows.length === 1 ? "its row" : "their rows"} in the sheet (${peso(sum)}). Undo it from the sheet's version history.`
+    if (!(await confirm(`Delete ${n}?`, note, "Delete"))) return
+    const result = await run("Deleting from the sheet…", () => deleteVouchers(sheet, rows.map(({ sheet_row, dv_no }) => ({ sheet_row, dv_no }))))
+    if (result.ok) {
+      toast.add({ title: result.message, type: "success" })
+      setAll(false)
+    }
+  }
   return (
     <div role="region" aria-label="Selection"
-      className="sticky bottom-4 z-10 mx-auto mt-4 flex w-full max-w-2xl flex-wrap items-center gap-2 rounded-xl bg-foreground px-4 py-2 text-sm text-background shadow-lg">
-      <span><strong>{rows.length}</strong> selected · <span className="tabular-nums">{peso(sum)}</span></span>
+      className="sticky bottom-4 z-10 mx-auto mt-4 flex w-fit max-w-full flex-wrap items-center gap-2 rounded-xl bg-foreground px-4 py-2 text-sm text-background shadow-lg">
+      {/* The count lives here only, so the buttons keep one width whether 1 or 999 are selected. */}
+      <span className="mr-2 whitespace-nowrap tabular-nums"><strong>{rows.length}</strong> selected · {peso(sum)}</span>
       {verify && <>
         <Button variant="secondary" className="ml-auto" onClick={() => mark(true)}>
-          <BadgeCheckIcon data-icon="inline-start" />Verify {rows.length}
+          <BadgeCheckIcon data-icon="inline-start" />Verify
         </Button>
         <Button variant="ghost" className="text-background hover:bg-background/10 hover:text-background" onClick={() => mark(false)}>For review</Button>
       </>}
       <Button variant="secondary" className={verify ? undefined : "ml-auto"} render={<a href={exportUrl} download />} nativeButton={false}>
-        <DownloadIcon data-icon="inline-start" />Export {rows.length}
+        <DownloadIcon data-icon="inline-start" />Export
       </Button>
+      {remove && (
+        <Button variant="ghost" className="text-background hover:bg-destructive hover:text-white" onClick={onDelete}>
+          <Trash2Icon data-icon="inline-start" />Delete
+        </Button>
+      )}
       <Button variant="ghost" className="text-background hover:bg-background/10 hover:text-background" onClick={() => setAll(false)}>Clear</Button>
     </div>
   )

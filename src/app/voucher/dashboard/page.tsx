@@ -1,16 +1,14 @@
-import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, ChartNoAxesColumnIcon, CheckIcon, ChevronDownIcon, NotebookTextIcon } from "lucide-react"
+import { ArrowDownIcon, ArrowRightIcon, ArrowUpIcon, ChartNoAxesColumnIcon, NotebookTextIcon } from "lucide-react"
 import type { Metadata } from "next"
 import Link from "next/link"
 
-import { compact } from "@/components/charts"
 import { AreaSummary, DonutChart, RankedBars, SectionWheel, TrendChart, type AreaStat, type Breakdown, type Day, type Point } from "@/components/dashboard-charts"
 import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Popover, PopoverContent, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover"
 import { clock, getData } from "@/lib/data"
-import { byIssue, group, isVerified, ISSUES, label, labelOf, longMonth, NOT_SET, monthLabel, months, monthsBack, peso, qs, total, yearThrough, type Voucher } from "@/lib/ledger"
+import { byIssue, group, isVerified, ISSUES, label, labelOf, longMonth, NOT_SET, monthLabel, monthsBack, peso, qs, total, yearThrough, type Voucher } from "@/lib/ledger"
 import { cn } from "@/lib/utils"
 
 export const metadata: Metadata = { title: "Dashboard" }
@@ -37,54 +35,30 @@ const change = (now: number, before: number, against: string) => {
 
 /** Overview of the whole sheet: how much is verified, what blocks the rest, and the shape of the money. */
 export default async function Dashboard({ searchParams }: PageProps<"/voucher/dashboard">) {
-  const { rows: everything, error, today, columns, pull } = await getData()
-  // Scope: one calendar year (Jan–Dec, default this year) or "all". Undated vouchers only show under All years.
-  const years = [...new Set([today.slice(0, 4), ...months(everything).map((m) => m.slice(0, 4))])].sort().reverse()
-  const { year: asked, month: askedMonth, by: askedBy } = await searchParams
-  const year = typeof asked === "string" && (asked === "all" || years.includes(asked)) ? asked : today.slice(0, 4)
-  // Month under comparison: the picked one, else the current month (December for a past year). All years reads the current month.
+  const { rows: everything, error, today, columns, pull, source } = await getData()
+  // Scope: the sheet's year, January – December by DV date. Each year is its own spreadsheet, picked in the sidebar.
+  const { month: askedMonth, by: askedBy } = await searchParams
+  const year = source.year || today.slice(0, 4)
+  // Month under comparison: the picked one, else the current month (December for a past year).
   const mm = typeof askedMonth === "string" && MONTH_NUMBERS.includes(askedMonth) ? askedMonth : year === today.slice(0, 4) ? today.slice(5, 7) : "12"
-  const thisMonth = year === "all" ? today.slice(0, 7) : `${year}-${mm}`, lastMonth = monthsBack(thisMonth, 1)
-  const rows = year === "all" ? everything : everything.filter((r) => r.month.startsWith(year + "-"))
-  const scope = year === "all" ? "all years" : year
+  const thisMonth = `${year}-${mm}`, lastMonth = monthsBack(thisMonth, 1)
+  const rows = everything.filter((r) => r.month.startsWith(year + "-"))
   const link = (changes: Record<string, string>) =>
-    "/voucher/vouchers/" + qs(new URLSearchParams(), year === "all" ? changes : { ...changes, year })
+    "/voucher/vouchers/" + qs(new URLSearchParams(), { ...changes, year })
 
   const switcher = (summary: React.ReactNode) => (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b pb-2 print:hidden">
-      {/* Year: the same soft pill menu as the chart controls, each year with what it disbursed. */}
-      <DropdownMenu>
-        <DropdownMenuTrigger render={<Button variant="secondary" size="sm" className="rounded-full tabular-nums" aria-label={`Year: ${scope}`} />}>
-          {year === "all" ? "All years" : year}<ChevronDownIcon data-icon="inline-end" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="min-w-56">
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>Year, by DV date</DropdownMenuLabel>
-            {[...years, "all"].map((y) => (
-              <DropdownMenuItem key={y} className="gap-2 py-1.5" render={<Link href={`/voucher/dashboard/?year=${y}`} aria-current={y === year ? "page" : undefined} />}>
-                <CheckIcon className={cn("text-primary", y !== year && "invisible")} />
-                <span className={cn("flex-1 tabular-nums", y === year && "font-medium")}>{y === "all" ? "All years" : y}</span>
-                <span className="text-xs text-muted-foreground tabular-nums">
-                  {compact(total(y === "all" ? everything : everything.filter((r) => r.month.startsWith(y + "-"))))}
-                </span>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      {year !== "all" && (
-        <nav aria-label="Month" className="grid w-full grid-cols-6 gap-1 sm:flex sm:w-auto sm:items-center">
-          {MONTH_NUMBERS.map((m) => (
-            <Button key={m} size="sm" variant={m === mm ? "secondary" : "ghost"} aria-current={m === mm ? "page" : undefined}
-              render={<Link href={`/voucher/dashboard/?year=${year}&month=${m}`} />} nativeButton={false}>
-              {monthLabel(`${year}-${m}`).slice(0, 3)}
-            </Button>
-          ))}
-        </nav>
-      )}
+      <nav aria-label="Month" className="grid w-full grid-cols-6 gap-1 sm:flex sm:w-auto sm:items-center">
+        {MONTH_NUMBERS.map((m) => (
+          <Button key={m} size="sm" variant={m === mm ? "secondary" : "ghost"} aria-current={m === mm ? "page" : undefined}
+            render={<Link href={`/voucher/dashboard/?month=${m}`} />} nativeButton={false}>
+            {monthLabel(`${year}-${m}`).slice(0, 3)}
+          </Button>
+        ))}
+      </nav>
       <div className="ml-auto flex items-center gap-3">
         <span className="hidden text-sm text-muted-foreground @6xl/main:inline">
-          {year === "all" ? "Every voucher, dated or not" : `January – December ${year}, by DV date`}
+          January – December {year}, by DV date
         </span>
         {summary}
       </div>
@@ -101,7 +75,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/voucher/da
             <EmptyMedia variant="icon"><ChartNoAxesColumnIcon /></EmptyMedia>
             <EmptyTitle>{everything.length ? `No vouchers dated ${year}.` : "No vouchers yet."}</EmptyTitle>
             <EmptyDescription>
-              {everything.length ? "Pick another year above, or All years." : "Charts appear once the sheet has disbursement vouchers."}
+              {everything.length ? "Check the DV dates, or pick another year in the sidebar." : "Charts appear once the sheet has disbursement vouchers."}
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
@@ -117,12 +91,8 @@ export default async function Dashboard({ searchParams }: PageProps<"/voucher/da
   // The month comparison reads the whole sheet, so January compares against the December before it.
   const monthRows = everything.filter((r) => r.month === thisMonth), lastRows = everything.filter((r) => r.month === lastMonth)
 
-  // The summary chart gets one entry per DV date and groups them itself. A year spans January 1 – December 31;
-  // All years runs from the first DV month to the latest (at least 12 months).
-  const dvMonths = months(rows), newest = dvMonths[0] > thisMonth ? dvMonths[0] : thisMonth
-  const oldest = [dvMonths.at(-1) ?? newest, monthsBack(newest, 11)].sort()[0]
-  const from = year === "all" ? `${oldest}-01` : `${year}-01-01`
-  const to = year === "all" ? new Date(Date.parse(`${monthsBack(newest, -1)}-01`) - 864e5).toISOString().slice(0, 10) : `${year}-12-31`
+  // The summary chart gets one entry per DV date and groups them itself, January 1 – December 31.
+  const from = `${year}-01-01`, to = `${year}-12-31`
   const byDay = new Map<string, Day>()
   for (const r of rows) {
     if (!r.dv) continue
@@ -170,7 +140,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/voucher/da
   }
   const areaStats: AreaStat[] = [statFor(null, rows), ...areas.map((a) => statFor(a.name, rows.filter((r) => keyOf(r) === a.name)))]
   const synced = clock(pull.at)
-  const scopeLine = `${year === "all" ? "All years" : `January – December ${year}`}, by DV date${synced ? ` · synced from the sheet at ${synced}` : ""}`
+  const scopeLine = `January – December ${year}, by DV date${synced ? ` · synced from the sheet at ${synced}` : ""}`
 
   // Summary sentences: each a fact the page also shows.
   const now = total(monthRows), before = total(lastRows), lastName = longMonth(lastMonth + "-01")
@@ -181,7 +151,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/voucher/da
   const sum = total(rows)
   const y = Number(year), through = year === today.slice(0, 4) ? today.slice(5, 7) : "12"
   const against = through === "12" ? String(y - 1) : `Jan–${monthLabel(`${y}-${through}`).slice(0, 3)} ${y - 1}`
-  const yearChange = year === "all" ? null : change(total(yearThrough(everything, y, through)), total(yearThrough(everything, y - 1, through)), against)
+  const yearChange = change(total(yearThrough(everything, y, through)), total(yearThrough(everything, y - 1, through)), against)
   const monthName = `${longMonth(thisMonth + "-01")} ${thisMonth.slice(0, 4)}`
   // Twelve months ending at the picked one, drawn as a 160x56 line beside its figure.
   const spark = Array.from({ length: 12 }, (_, i) => total(everything.filter((r) => r.month === monthsBack(thisMonth, 11 - i))))
@@ -206,7 +176,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/voucher/da
       </PopoverHeader>
       <div className="flex flex-col gap-2 leading-relaxed text-pretty">
         <p>
-          <b className="tabular-nums">{peso(total(rows))}</b> disbursed across {vouchers(rows.length)} in {scope};
+          <b className="tabular-nums">{peso(total(rows))}</b> disbursed across {vouchers(rows.length)} in {year};
           {" "}<b className="tabular-nums">{vouchers(verified.length)}</b> ({percent(verified.length, rows.length)}) are verified.
         </p>
         <p>
@@ -236,7 +206,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/voucher/da
       {/* Key figures: this scope's total, and the picked month against the one before it. Each card is label and note, then the figure. */}
       <dl aria-label="Key figures" className="grid gap-4 break-inside-avoid @3xl/main:grid-cols-2">
         <div className={cn(PANEL, "grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1 bg-card px-5 py-4")}>
-          <dt className="text-sm text-muted-foreground">Disbursed, {scope}</dt>
+          <dt className="text-sm text-muted-foreground">Disbursed, {year}</dt>
           <dd className="col-span-2 text-3xl font-semibold tracking-tight tabular-nums @5xl/main:text-4xl">{peso(sum)}</dd>
           <dd className="col-start-2 row-start-1"><Pill text={yearChange ?? vouchers(rows.length)} /></dd>
         </div>
@@ -319,7 +289,7 @@ export default async function Dashboard({ searchParams }: PageProps<"/voucher/da
           </CardContent>
         </Card>
 
-        <ChartCard title="Disbursed summary" description={`Amount by DV date, ${year === "all" ? "all years" : year} · by day, week or month, or any date range · verified under for review`}
+        <ChartCard title="Disbursed summary" description={`Amount by DV date, ${year} · by day, week or month, or any date range · verified under for review`}
           className="fit:min-h-0 @5xl/main:col-span-7">
           <TrendChart key={year} days={[...byDay.values()]} from={from} to={to} />
         </ChartCard>

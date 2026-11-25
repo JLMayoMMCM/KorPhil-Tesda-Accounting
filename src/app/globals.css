@@ -140,6 +140,14 @@
   }
 }
 
+/* Navigation buttons (link buttons, [data-nav] like the portal rows) push down while held; sidebar links
+   don't, their spinner is feedback enough. Other buttons keep the 1px nudge from button.tsx.
+   Unlayered so it beats that utility. */
+:is(a[data-slot="button"], [data-nav]):active {
+  translate: 0 2px;
+  scale: 0.98;
+}
+
 /* Navy sidebar: idle icons recede, the current item is a brighter white wash than hover. */
 [data-slot="sidebar"] :is([data-slot="sidebar-menu-button"], [data-slot="sidebar-menu-sub-button"]) > svg {
   opacity: 0.75;

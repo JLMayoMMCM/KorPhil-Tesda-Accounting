@@ -34,7 +34,7 @@ export default async function Settings() {
         ? <Badge variant="destructive"><UnplugIcon data-icon="inline-start" />Not connected</Badge>
         : <Badge variant="secondary"><PlugIcon data-icon="inline-start" />Connected through your Google account</Badge>}
     </>, open("Open sheet")],
-    ["Year", "Switch years in the sidebar.", <>
+    ["Year", "Change the year from the sidebar.", <>
       <strong className="font-medium">{source.year || "Current year"}</strong>
       {source.readOnly && <Badge variant="secondary">Read-only</Badge>}
       {!source.year && <span className="text-muted-foreground">from <code>.env.local</code>, until years are added on Data sources</span>}

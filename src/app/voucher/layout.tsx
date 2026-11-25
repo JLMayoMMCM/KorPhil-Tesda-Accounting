@@ -5,7 +5,7 @@ import { clock, getData } from "@/lib/data"
 import { sheetUrl } from "@/lib/sheets"
 
 export default async function VoucherLayout({ children }: LayoutProps<"/voucher">) {
-  const { counts, pull, error, user, source, years } = await getData()
+  const { counts, pull, error, user, source } = await getData()
   const synced = clock(pull.at)
   return (
     <AppShell
@@ -18,7 +18,6 @@ export default async function VoucherLayout({ children }: LayoutProps<"/voucher"
           sheetTitle={pull.title}
           synced={synced ? `Synced ${synced} · ${pull.rows} rows` : "Not synced"}
           sheetUrl={sheetUrl(source.id)}
-          years={years}
           year={source.year}
         />
       }

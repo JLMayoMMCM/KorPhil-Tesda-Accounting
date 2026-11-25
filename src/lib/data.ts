@@ -34,20 +34,20 @@ const locked = <C extends Column<string>>(columns: C[], readOnly: boolean): C[] 
 /** One sheet pull per request, shared by the layout and the page. */
 export const getData = cache(async () => {
   const session = await getSession()
-  const { source, years } = await getSource("voucher")
+  const { source } = await getSource("voucher")
   const [raw, error, pull] = await fetchRows(source, session.access_token)
   const today = todayManila()
   const rows = enrich(raw, pull.model?.layout.missing ?? [])
   const counts = Object.fromEntries((Object.keys(TABS) as Tab[]).map((t) => [t, rows.filter((r) => inTab(r, t)).length])) as Record<Tab, number>
   // columns: the sheet columns in use, in sheet order (role fields and extras), for the form, CSV and reports.
   const columns = locked(pull.model?.columns ?? [], source.readOnly)
-  return { rows, error, today, counts, pull, columns, user: session.user, source, years }
+  return { rows, error, today, counts, pull, columns, user: session.user, source }
 })
 
 /** One Collection tab pull per request: its entries and rows, why rows were skipped, and the header it read. */
 export const getCollectionData = cache(async () => {
   const session = await getSession()
-  const { source, years } = await getSource("collection")
+  const { source } = await getSource("collection")
   const [rows, pullError, pull] = await fetchRows(source, session.access_token)
   const read = entriesFrom(pull.values, pull.model ?? readSheet(pull.values, { book: COLLECTION }))
   // A header that can't be found only matters once the tab has been read.
@@ -57,7 +57,7 @@ export const getCollectionData = cache(async () => {
   // rows: each entry's cells as text by column key (extras too), for the form; columns: the tab's columns in sheet order.
   return {
     ...read, layout, rows, columns: locked(read.model.columns, source.readOnly), error, today: todayManila(), title: pull.title, at: pull.at,
-    user: session.user, pull, source, years,
+    user: session.user, pull, source,
   }
 })
 

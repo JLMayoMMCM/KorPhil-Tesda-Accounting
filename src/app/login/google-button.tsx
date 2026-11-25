@@ -21,9 +21,10 @@ export function GoogleButton() {
   return (
     <button
       type="submit"
+      data-nav
       aria-busy={pending}
       onClick={() => setPending(true)}
-      className="group flex h-14 w-full items-center gap-3 rounded-full bg-sidebar px-2 font-medium text-sidebar-foreground shadow-[inset_0_1px_1px_rgb(255_255_255/0.35),inset_0_-8px_14px_-10px_rgb(255_255_255/0.25)] outline-offset-2 outline-sidebar transition-colors duration-200 hover:bg-[color-mix(in_oklch,var(--sidebar),black_22%)] focus-visible:outline-2 active:translate-y-px"
+      className="group flex h-14 w-full items-center gap-3 rounded-full bg-sidebar px-2 font-medium text-sidebar-foreground shadow-[inset_0_1px_1px_rgb(255_255_255/0.35),inset_0_-8px_14px_-10px_rgb(255_255_255/0.25)] outline-offset-2 outline-sidebar transition-colors duration-200 hover:bg-[color-mix(in_oklch,var(--sidebar),black_22%)] focus-visible:outline-2"
     >
       <span className="flex size-10 items-center justify-center rounded-full bg-white"><GoogleMark className="size-5" /></span>
       {pending ? "Opening Google…" : "Continue with Google"}

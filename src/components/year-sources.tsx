@@ -22,33 +22,31 @@ function Message({ result }: { result: { ok: boolean; message: string } | null }
   )
 }
 
-/** Add a year: paste the link, Check to preview it (title, tab, header row, row count), then Save to list it. */
+/** Add a year: paste its spreadsheet's link once, Check to preview both tabs (header row, row count), then Save to list it. */
 export function AddYear({ year, tabs }: { year: string; tabs: Record<"voucher" | "collection", string> }) {
   const [state, action, pending] = React.useActionState(sourceAction, null)
-  const [module, setModule] = React.useState<"voucher" | "collection">("voucher")
+  // The page suggests the next year once one is saved; the field keeps its first value (Base UI inputs can't change it).
+  const [firstYear] = React.useState(year)
   return (
     <form action={action} className="flex flex-col gap-4">
-      <div className="grid gap-4 sm:grid-cols-[8rem_12rem_1fr]">
+      <div className="grid gap-4 sm:grid-cols-[8rem_1fr]">
         <Field>
           <FieldLabel htmlFor="year">Year</FieldLabel>
-          <Input id="year" name="year" inputMode="numeric" pattern="\d{4}" maxLength={4} defaultValue={year} required />
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="module">Module</FieldLabel>
-          <NativeSelect id="module" name="module" value={module} onChange={(e) => setModule(e.target.value as typeof module)} className="w-full">
-            <NativeSelectOption value="voucher">Disbursement</NativeSelectOption>
-            <NativeSelectOption value="collection">Collection</NativeSelectOption>
-          </NativeSelect>
+          <Input id="year" name="year" inputMode="numeric" pattern="\d{4}" maxLength={4} defaultValue={firstYear} required />
         </Field>
         <Field>
           <FieldLabel htmlFor="link">Spreadsheet link</FieldLabel>
           <Input id="link" name="link" type="url" placeholder="https://docs.google.com/spreadsheets/d/…" required />
         </Field>
       </div>
-      <div className="grid gap-4 sm:grid-cols-[12rem_12rem]">
+      <div className="grid gap-4 sm:grid-cols-3">
         <Field>
-          <FieldLabel htmlFor="tab">Tab</FieldLabel>
-          <Input id="tab" name="tab" placeholder={tabs[module]} />
+          <FieldLabel htmlFor="tab-voucher">Disbursement tab</FieldLabel>
+          <Input id="tab-voucher" name="tab-voucher" defaultValue={tabs.voucher} />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="tab-collection">Collection tab</FieldLabel>
+          <Input id="tab-collection" name="tab-collection" defaultValue={tabs.collection} />
         </Field>
         <Field>
           <FieldLabel htmlFor="status">Status</FieldLabel>
@@ -57,6 +55,7 @@ export function AddYear({ year, tabs }: { year: string; tabs: Record<"voucher" |
           </NativeSelect>
         </Field>
       </div>
+      <p className="text-sm text-muted-foreground">Leave a tab blank if that module&apos;s year is in another spreadsheet, and add that one separately.</p>
       <Message result={state} />
       {state?.preview?.tabs.length ? (
         <p className="text-sm text-muted-foreground">Tabs in this spreadsheet: {state.preview.tabs.join(", ")}</p>
