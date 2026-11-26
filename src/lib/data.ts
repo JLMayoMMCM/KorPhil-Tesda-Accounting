@@ -5,10 +5,11 @@ import { redirect } from "next/navigation"
 import { cache } from "react"
 
 import { COLLECTION, entriesFrom } from "@/lib/collection"
+import { cleanLayout, dashboardCookie } from "@/lib/dashboard"
 import { enrich, inTab, TABS, todayManila, type Tab } from "@/lib/ledger"
 import { SESSION_COOKIE, unseal, type Session } from "@/lib/session"
 import { readSheet, type Column } from "@/lib/sheet-config"
-import { fetchRows, type BookName } from "@/lib/sheets"
+import { fetchRows, readDashboard, type BookName } from "@/lib/sheets"
 import { resolveSource } from "@/lib/years-sheet"
 
 /** The year each user picked in the sidebar; every page and export reads that year's spreadsheet. */
@@ -58,6 +59,19 @@ export const getCollectionData = cache(async () => {
   return {
     ...read, layout, rows, columns: locked(read.model.columns, source.readOnly), error, today: todayManila(), title: pull.title, at: pull.at,
     user: session.user, pull, source,
+  }
+})
+
+/** This person's dashboard layout for a module: the one saved in its year's spreadsheet, else this browser's copy, else null (the default). */
+export const getDashboard = cache(async (name: BookName) => {
+  const session = await getSession()
+  const { source } = await getSource(name)
+  const saved = await readDashboard(source, session.access_token, session.user.email)
+  if (saved) return saved
+  try {
+    return cleanLayout(JSON.parse(decodeURIComponent((await cookies()).get(dashboardCookie(name))?.value ?? "null")))
+  } catch {
+    return null
   }
 })
 

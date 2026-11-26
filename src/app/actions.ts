@@ -10,7 +10,8 @@ import { cellOf, DV_FORMAT, FOR_REVIEW, freeDvNo, parseAmount, parseDate, rowSig
 import { COLLECTION_HOME, VOUCHER_HOME } from "@/lib/nav"
 import { SESSION_COOKIE } from "@/lib/session"
 import { bookRoles, colLetter, DISBURSEMENT, INPUT_TYPES, VISIBILITY, type Book, type Column, type ColumnSetting, type InputType, type Saved, type SheetModel, type Visibility } from "@/lib/sheet-config"
-import { appendRow, type BookName, DEFAULT_TAB, fetchRows, readOnlyMessage, readWith, saveSettings, setDvNo, setStatuses, updateCells, writeCells } from "@/lib/sheets"
+import { cleanLayout } from "@/lib/dashboard"
+import { appendRow, type BookName, DEFAULT_TAB, fetchRows, readOnlyMessage, readWith, saveDashboard, saveSettings, setDvNo, setStatuses, updateCells, writeCells } from "@/lib/sheets"
 import { MODULE_NAMES, STATUSES, YEAR, type Status } from "@/lib/years"
 import { addYear, changeYear, previewSheet, type Preview } from "@/lib/years-sheet"
 
@@ -217,6 +218,17 @@ export async function renumberVoucher(sheetRow: number, from: string, to: string
   if (failed) return { ok: false, message: failed }
   refresh()
   return { ok: true, message: dvNo === to.trim() ? `Row ${sheetRow} is now ${dvNo}.` : `${to} was just taken; used ${dvNo}.`, dvNo }
+}
+
+/** Save the signed-in person's dashboard layout for a module in its year's spreadsheet (the browser keeps a copy too). */
+export async function saveDashboardLayout(name: BookName, sheet: string, layout: unknown): Promise<Result> {
+  if (name !== "voucher" && name !== "collection") return { ok: false, message: "Not saved: unknown dashboard." }
+  const clean = cleanLayout(layout)
+  if (!clean) return { ok: false, message: "Not saved: that layout couldn't be read." }
+  const { token, user, src, error } = await target(name, sheet)
+  if (error) return { ok: false, message: error }
+  const failed = await saveDashboard(src, token, user.email, clean)
+  return failed ? { ok: false, message: failed } : { ok: true, message: "Layout saved" }
 }
 
 export async function sync(): Promise<Result> {

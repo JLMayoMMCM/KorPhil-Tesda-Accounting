@@ -4,6 +4,7 @@ import { createHash } from "node:crypto"
 import { after } from "next/server"
 
 import { COLLECTION } from "@/lib/collection"
+import { cleanLayout, type DashLayout } from "@/lib/dashboard"
 import { serialDate, type Field } from "@/lib/ledger"
 import {
   CACHE_SECONDS, colLetter, DISBURSEMENT, headerSig, metaKeys, pullPlan, readSheet, savedFrom,
@@ -442,6 +443,64 @@ export async function saveSettings(src: Source, token: string, saved: Saved<stri
   ]
   const [, error] = await send(src, token, `${API}/${src.id}:batchUpdate`, "POST", { requests })
   return error
+}
+
+// ---- Dashboard layouts: one per person per book, as developer metadata on the spreadsheet ----
+
+const dashKey = (src: Source) => `${bookOf(src.name).name}.dashboard`
+// ponytail: a process-wide cache (this app runs as one Next server); a second server would only re-read the sheet on a miss.
+const dashboards = new Map<string, { id: number | null; layout: DashLayout | null }>()
+const dashCacheKey = (src: Source, email: string) => `${dashKey(src)}|${src.id}|${email}`
+
+/** The person's saved tag on this spreadsheet: its metadata id (to update it in place) and layout. */
+async function findDashboard(src: Source, token: string, email: string) {
+  const found: { developerMetadata: { metadataId: number; metadataValue?: string } }[] = (await call(`${API}/${src.id}/developerMetadata:search`, token, {
+    method: "POST",
+    body: JSON.stringify({ dataFilters: [{ developerMetadataLookup: { metadataKey: dashKey(src) } }] }),
+  })).matchedDeveloperMetadata ?? []
+  for (const { developerMetadata: m } of found) {
+    try {
+      const v = JSON.parse(m.metadataValue ?? "")
+      if (v?.u === email) return { id: m.metadataId, layout: cleanLayout(v.w) }
+    } catch { /* someone else's or unreadable: skip */ }
+  }
+  return { id: null, layout: null }
+}
+
+/** This person's dashboard layout saved in the spreadsheet, or null (none saved, or it couldn't be read). */
+export async function readDashboard(src: Source, token: string, email: string): Promise<DashLayout | null> {
+  if (!src.id) return null
+  const k = dashCacheKey(src, email)
+  if (!dashboards.has(k)) {
+    try {
+      dashboards.set(k, await findDashboard(src, token, email))
+    } catch {
+      return null // a layout is a convenience, never a blocker
+    }
+  }
+  return dashboards.get(k)!.layout
+}
+
+/**
+ * Save this person's layout in the spreadsheet: one tag each, found by their email, updated in place. Needs edit
+ * access (a Viewer gets Google's permission error, and the layout stays in their browser only). Visibility PROJECT,
+ * like the layout settings. Doesn't touch the ledger, so the rows cache is kept.
+ */
+export async function saveDashboard(src: Source, token: string, email: string, layout: DashLayout): Promise<string | null> {
+  const k = dashCacheKey(src, email)
+  try {
+    const known = dashboards.get(k) ?? (await findDashboard(src, token, email))
+    const value = JSON.stringify({ u: email, w: layout })
+    const request = known.id !== null
+      ? { updateDeveloperMetadata: { dataFilters: [{ developerMetadataLookup: { metadataId: known.id } }], developerMetadata: { metadataValue: value }, fields: "metadataValue" } }
+      : { createDeveloperMetadata: { developerMetadata: { metadataKey: dashKey(src), metadataValue: value, location: { spreadsheet: true }, visibility: "PROJECT" } } }
+    const reply = await call(`${API}/${src.id}:batchUpdate`, token, { method: "POST", body: JSON.stringify({ requests: [request] }) })
+    dashboards.set(k, { id: known.id ?? reply?.replies?.[0]?.createDeveloperMetadata?.developerMetadata?.metadataId ?? null, layout })
+    return null
+  } catch (exc) {
+    dashboards.delete(k) // the tag may have gone: look it up again next time
+    return "Saved on this PC only: your Google account " + explain(exc)
+  }
 }
 
 /** A spreadsheet's address in Google Sheets. */
